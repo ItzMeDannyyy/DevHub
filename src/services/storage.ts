@@ -1,9 +1,20 @@
-import { Project, UserSettings } from '../types';
+import { Project, UserSettings, getProjectServices } from '../types';
 
-const PROJECTS_STORAGE_KEY = 'devhub_projects_v1';
-const SETTINGS_STORAGE_KEY = 'devhub_settings_v1';
+const PROJECTS_STORAGE_KEY = 'devhub_projects_v3';
+const SETTINGS_STORAGE_KEY = 'devhub_settings_v2';
+
+const LEGACY_MOCK_IDS = new Set([
+  'devhub-core',
+  'client-api',
+  'portfolio-site',
+  'school-comp-sci',
+  'code-reviewer-cli',
+]);
 
 export const DEFAULT_SETTINGS: UserSettings = {
+  developerName: 'Developer',
+  animateGreetingName: true,
+  theme: 'system',
   autostartOnLogin: true,
   minimizeToTray: true,
   preferredIde: 'vscode',
@@ -13,79 +24,38 @@ export const DEFAULT_SETTINGS: UserSettings = {
 
 export const INITIAL_PROJECTS: Project[] = [
   {
-    id: 'devhub-core',
-    name: 'Development Hub (DevHub)',
+    id: 'sample-project',
+    name: 'Sample Project',
     path: 'C:\\Users\\ThinkPad\\Desktop\\Danny\\Development Hub',
     category: 'work',
-    priority: 'critical',
-    deadline: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    notes: 'Cross-platform developer efficiency hub with one-click IDE launch and morning briefing.',
-    favorite: true,
-    gitStatus: {
-      branch: 'main',
-      uncommittedCount: 3,
-      lastCommitTime: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
-      lastCommitMessage: 'feat: add morning briefing and IDE launcher spec',
-      isClean: false,
-    },
-    lastOpenedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'client-api',
-    name: 'Client E-Commerce API',
-    path: 'C:\\Users\\ThinkPad\\Projects\\client-ecommerce-api',
-    category: 'client',
-    priority: 'high',
-    deadline: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    notes: 'Stripe webhook integration & order processing refactor.',
-    favorite: true,
-    gitStatus: {
-      branch: 'feature/payment-webhook',
-      uncommittedCount: 5,
-      lastCommitTime: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
-      lastCommitMessage: 'wip: handle customer subscription renewals',
-      isClean: false,
-    },
-    lastOpenedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'portfolio-redesign',
-    name: 'Developer Portfolio & Blog',
-    path: 'C:\\Users\\ThinkPad\\Projects\\personal-portfolio',
-    category: 'personal',
     priority: 'medium',
-    deadline: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    notes: 'Migrating blog posts to MDX and updating projects showcase.',
-    favorite: false,
+    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    notes: 'Sample repository to explore DevHub features: multi-service controller, working tree diagram, and document viewer.',
+    favorite: true,
+    services: [
+      {
+        id: 'srv-sample-1',
+        name: 'Frontend Service',
+        folder: './',
+        command: 'npm run dev',
+      },
+      {
+        id: 'srv-sample-2',
+        name: 'Core Service',
+        folder: './src-tauri',
+        command: 'cargo check',
+      },
+    ],
+    devCommand: 'npm run dev',
     gitStatus: {
       branch: 'main',
       uncommittedCount: 0,
-      lastCommitTime: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-      lastCommitMessage: 'style: refresh dark theme accents',
+      lastCommitTime: new Date().toISOString(),
+      lastCommitMessage: 'initial commit',
       isClean: true,
     },
-    lastOpenedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'ai-code-reviewer',
-    name: 'OpenSource AI Code Reviewer',
-    path: 'C:\\Users\\ThinkPad\\Projects\\ai-code-reviewer',
-    category: 'open-source',
-    priority: 'low',
-    notes: 'CLI tool that analyzes git diffs using LLMs.',
-    favorite: false,
-    gitStatus: {
-      branch: 'feat/ast-parser',
-      uncommittedCount: 1,
-      lastCommitTime: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
-      lastCommitMessage: 'refactor: tree-sitter bindings',
-      isClean: false,
-    },
-    lastOpenedAt: new Date(Date.now() - 18 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
+    lastOpenedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   },
 ];
 
@@ -93,12 +63,41 @@ export const loadProjects = (): Project[] => {
   try {
     const raw = localStorage.getItem(PROJECTS_STORAGE_KEY);
     if (!raw) {
+      // Check legacy storage keys (v2 / v1)
+      const legacyRaw =
+        localStorage.getItem('devhub_projects_v2') ||
+        localStorage.getItem('devhub_projects');
+      if (legacyRaw) {
+        try {
+          const legacyParsed: Project[] = JSON.parse(legacyRaw);
+          // Preserve any custom user-created projects while filtering out the old 5 mock projects
+          const customProjects = legacyParsed.filter(
+            (p) => !LEGACY_MOCK_IDS.has(p.id)
+          );
+          if (customProjects.length > 0) {
+            const combined = [...INITIAL_PROJECTS, ...customProjects];
+            saveProjects(combined);
+            return combined;
+          }
+        } catch {
+          // ignore legacy parse errors
+        }
+      }
       saveProjects(INITIAL_PROJECTS);
       return INITIAL_PROJECTS;
     }
-    return JSON.parse(raw);
+    const parsed: Project[] = JSON.parse(raw);
+    return parsed.map((p) => {
+      if (!p.services || p.services.length === 0) {
+        return {
+          ...p,
+          services: getProjectServices(p),
+        };
+      }
+      return p;
+    });
   } catch (err) {
-    console.error('Failed to load projects from storage:', err);
+    console.error('Failed to load projects:', err);
     return INITIAL_PROJECTS;
   }
 };
@@ -107,7 +106,7 @@ export const saveProjects = (projects: Project[]): void => {
   try {
     localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
   } catch (err) {
-    console.error('Failed to save projects to storage:', err);
+    console.error('Failed to save projects:', err);
   }
 };
 

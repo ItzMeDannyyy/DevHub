@@ -30,4 +30,20 @@ export default defineConfig(() => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+  build: {
+    // Target modern chromium engine used by modern WebView2
+    target: "es2022",
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-dom")) {
+            return "vendor";
+          }
+          if (id.includes("node_modules/lucide-react")) {
+            return "icons";
+          }
+        },
+      },
+    },
+  },
 }));
