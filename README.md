@@ -1,4 +1,4 @@
-# Development Hub (DevHub)
+# Developer's Hub (DevHub)
 
 > **A minimalist, high-contrast monochrome desktop command center and process controller for software engineers.**
 
