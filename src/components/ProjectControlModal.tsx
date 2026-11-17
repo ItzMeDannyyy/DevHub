@@ -24,6 +24,10 @@ import {
   RefreshCw,
   ChevronDown,
   Plus,
+  Sparkles,
+  Code2,
+  Code,
+  Cpu,
 } from 'lucide-react';
 import { Project, getProjectServices } from '../types';
 import { formatDeadlineDisplay } from '../utils/date';
@@ -40,12 +44,138 @@ import {
   formatRepoWebUrl,
 } from '../services/tauriBridge';
 
+interface IdeLauncherOption {
+  id: string;
+  name: string;
+  command: string;
+  badge?: string;
+  icon: (size: number) => React.ReactNode;
+}
+
+export const IDE_LAUNCHER_OPTIONS: IdeLauncherOption[] = [
+  {
+    id: 'vscode',
+    name: 'VS Code',
+    command: 'code',
+    badge: 'Popular',
+    icon: (s) => <VsCodeIcon size={s} />,
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor AI',
+    command: 'cursor',
+    badge: 'AI',
+    icon: (s) => <Sparkles size={s} className="text-sky-400" />,
+  },
+  {
+    id: 'sublime',
+    name: 'Sublime Text',
+    command: 'subl',
+    icon: (s) => <Code2 size={s} className="text-amber-500" />,
+  },
+  {
+    id: 'webstorm',
+    name: 'WebStorm',
+    command: 'webstorm',
+    badge: 'JetBrains',
+    icon: (s) => <Code size={s} className="text-teal-400" />,
+  },
+  {
+    id: 'intellij',
+    name: 'IntelliJ IDEA',
+    command: 'idea',
+    badge: 'JetBrains',
+    icon: (s) => <Layers size={s} className="text-rose-400" />,
+  },
+  {
+    id: 'pycharm',
+    name: 'PyCharm',
+    command: 'pycharm',
+    badge: 'JetBrains',
+    icon: (s) => <Terminal size={s} className="text-emerald-400" />,
+  },
+  {
+    id: 'zed',
+    name: 'Zed Editor',
+    command: 'zed',
+    badge: 'Fast',
+    icon: (s) => <Terminal size={s} className="text-indigo-400" />,
+  },
+  {
+    id: 'code-insiders',
+    name: 'VS Code Insiders',
+    command: 'code-insiders',
+    badge: 'Preview',
+    icon: (s) => <VsCodeIcon size={s} className="text-emerald-500" />,
+  },
+];
+
+interface TerminalLauncherOption {
+  id: string;
+  name: string;
+  command: string;
+  badge?: string;
+  description: string;
+  icon: (size: number) => React.ReactNode;
+}
+
+export const TERMINAL_LAUNCHER_OPTIONS: TerminalLauncherOption[] = [
+  {
+    id: 'powershell',
+    name: 'PowerShell',
+    command: 'powershell',
+    badge: 'Default',
+    description: 'Windows PowerShell 5.1',
+    icon: (s) => <Terminal size={s} className="text-sky-400" />,
+  },
+  {
+    id: 'cmd',
+    name: 'Command Prompt',
+    command: 'cmd',
+    badge: 'CMD',
+    description: 'Classic Windows cmd.exe',
+    icon: (s) => <Terminal size={s} className="text-amber-400" />,
+  },
+  {
+    id: 'git-bash',
+    name: 'Git Bash',
+    command: 'git-bash',
+    badge: 'Bash',
+    description: 'MINGW64 Git Bash Shell',
+    icon: (s) => <GitBranch size={s} className="text-orange-400" />,
+  },
+  {
+    id: 'wsl',
+    name: 'WSL (Linux)',
+    command: 'wsl',
+    badge: 'Linux',
+    description: 'Windows Subsystem for Linux',
+    icon: (s) => <Cpu size={s} className="text-emerald-400" />,
+  },
+  {
+    id: 'pwsh',
+    name: 'PowerShell 7',
+    command: 'pwsh',
+    badge: 'Core',
+    description: 'Cross-platform PowerShell 7+',
+    icon: (s) => <Terminal size={s} className="text-blue-400" />,
+  },
+  {
+    id: 'wt',
+    name: 'Windows Terminal',
+    command: 'wt',
+    badge: 'WT',
+    description: 'Modern tabbed terminal host',
+    icon: (s) => <Layers size={s} className="text-indigo-400" />,
+  },
+];
+
 interface ProjectControlModalProps {
   project: Project | null;
   isOpen: boolean;
   onClose: () => void;
-  onOpenIde: (p: Project) => void;
-  onOpenTerminal: (p: Project) => void;
+  onOpenIde: (p: Project, customIde?: string) => void;
+  onOpenTerminal: (p: Project, customTerminal?: string) => void;
   onOpenFolder: (p: Project) => void;
   onOpenWorkingTree: (p: Project) => void;
   onStartService: (p: Project, serviceId: string, cmd?: string) => void;
@@ -83,6 +213,14 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
   const [customCmds, setCustomCmds] = useState<Record<string, string>>({});
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [editingServiceName, setEditingServiceName] = useState('');
+  const [isIdeDropdownOpen, setIsIdeDropdownOpen] = useState(false);
+  const [isTerminalDropdownOpen, setIsTerminalDropdownOpen] = useState(false);
+  const [selectedIdeId, setSelectedIdeId] = useState<string>('vscode');
+  const [selectedTerminalId, setSelectedTerminalId] = useState<string>('powershell');
+
+  const ideDropdownRef = useRef<HTMLDivElement>(null);
+  const terminalDropdownRef = useRef<HTMLDivElement>(null);
+
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isPathValid, setIsPathValid] = useState<boolean | null>(null);
@@ -416,7 +554,43 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
     setCustomCmds({});
     setEditingServiceId(null);
     setEditingServiceName('');
-  }, [project?.id]);
+    setIsIdeDropdownOpen(false);
+    setIsTerminalDropdownOpen(false);
+  }, [project?.id, isOpen]);
+
+  // Outside click listener for launcher dropdowns
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        ideDropdownRef.current &&
+        !ideDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsIdeDropdownOpen(false);
+      }
+      if (
+        terminalDropdownRef.current &&
+        !terminalDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsTerminalDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const currentIde = useMemo(() => {
+    return (
+      IDE_LAUNCHER_OPTIONS.find((opt) => opt.id === selectedIdeId) ||
+      IDE_LAUNCHER_OPTIONS[0]
+    );
+  }, [selectedIdeId]);
+
+  const currentTerminal = useMemo(() => {
+    return (
+      TERMINAL_LAUNCHER_OPTIONS.find((opt) => opt.id === selectedTerminalId) ||
+      TERMINAL_LAUNCHER_OPTIONS[0]
+    );
+  }, [selectedTerminalId]);
 
   const handleStartEditServiceName = (id: string, currentName: string) => {
     setEditingServiceId(id);
@@ -766,23 +940,158 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
               )}
             </div>
 
-            {/* Launch Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => onOpenIde(project)}
-                className="monochrome-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
-              >
-                <VsCodeIcon size={14} />
-                <span>Launch VS Code</span>
-              </button>
+            {/* Launch Buttons with Dropdown Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-20">
+              {/* IDE Split Button */}
+              <div className="relative" ref={ideDropdownRef}>
+                <div className="flex items-stretch rounded-md shadow-xs bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] overflow-hidden">
+                  <button
+                    onClick={() => onOpenIde(project, currentIde.command)}
+                    className="monochrome-btn flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium hover:opacity-90 cursor-pointer truncate"
+                    title={`Launch in ${currentIde.name}`}
+                  >
+                    {currentIde.icon(14)}
+                    <span className="truncate">Launch {currentIde.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsIdeDropdownOpen((prev) => !prev);
+                      setIsTerminalDropdownOpen(false);
+                    }}
+                    className={`px-2.5 py-2.5 border-l border-white/20 hover:bg-black/10 transition-colors cursor-pointer flex items-center justify-center ${
+                      isIdeDropdownOpen ? 'bg-black/15' : ''
+                    }`}
+                    title="Choose Editor to Launch (Sublime, Cursor, JetBrains...)"
+                  >
+                    <ChevronDown
+                      size={13}
+                      className={`transition-transform duration-200 ${
+                        isIdeDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
 
-              <button
-                onClick={() => onOpenTerminal(project)}
-                className="monochrome-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] text-[var(--text-primary)] text-xs font-mono font-medium hover:border-[var(--border-hover)] cursor-pointer"
-              >
-                <Terminal size={14} />
-                <span>Open Terminal</span>
-              </button>
+                {/* IDE Dropdown Menu */}
+                {isIdeDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xl z-50 text-xs font-mono backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+                    <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--text-tertiary)] border-b border-[var(--border-color)] mb-1">
+                      Choose Editor
+                    </div>
+                    {IDE_LAUNCHER_OPTIONS.map((opt) => {
+                      const isSelected = opt.id === currentIde.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedIdeId(opt.id);
+                            setIsIdeDropdownOpen(false);
+                            onOpenIde(project, opt.command);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer hover:bg-[var(--bg-subtle)] ${
+                            isSelected
+                              ? 'text-sky-500 font-semibold bg-[var(--bg-subtle)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="shrink-0">{opt.icon(14)}</span>
+                            <span className="truncate">{opt.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {opt.badge && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[var(--text-tertiary)] font-normal">
+                                {opt.badge}
+                              </span>
+                            )}
+                            {isSelected && <Check size={12} className="text-sky-500 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Terminal Split Button */}
+              <div className="relative" ref={terminalDropdownRef}>
+                <div className="flex items-stretch rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] hover:border-[var(--border-hover)] text-[var(--text-primary)] shadow-xs overflow-hidden transition-colors">
+                  <button
+                    onClick={() => onOpenTerminal(project, currentTerminal.command)}
+                    className="monochrome-btn flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium cursor-pointer truncate hover:text-[var(--text-primary)]"
+                    title={`Open in ${currentTerminal.name}`}
+                  >
+                    {currentTerminal.icon(14)}
+                    <span className="truncate">{currentTerminal.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalDropdownOpen((prev) => !prev);
+                      setIsIdeDropdownOpen(false);
+                    }}
+                    className={`px-2.5 py-2.5 border-l border-[var(--border-color)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer flex items-center justify-center ${
+                      isTerminalDropdownOpen ? 'bg-[var(--bg-canvas)]' : ''
+                    }`}
+                    title="Choose Terminal Shell (CMD, WSL, Git Bash, PowerShell...)"
+                  >
+                    <ChevronDown
+                      size={13}
+                      className={`transition-transform duration-200 ${
+                        isTerminalDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Terminal Dropdown Menu */}
+                {isTerminalDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xl z-50 text-xs font-mono backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+                    <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--text-tertiary)] border-b border-[var(--border-color)] mb-1">
+                      Choose Terminal Shell
+                    </div>
+                    {TERMINAL_LAUNCHER_OPTIONS.map((opt) => {
+                      const isSelected = opt.id === currentTerminal.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTerminalId(opt.id);
+                            setIsTerminalDropdownOpen(false);
+                            onOpenTerminal(project, opt.command);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer hover:bg-[var(--bg-subtle)] ${
+                            isSelected
+                              ? 'text-sky-500 font-semibold bg-[var(--bg-subtle)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="shrink-0">{opt.icon(14)}</span>
+                            <div className="truncate">
+                              <div className="truncate">{opt.name}</div>
+                              <div className="text-[10px] text-[var(--text-tertiary)] font-normal truncate">
+                                {opt.description}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {opt.badge && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[var(--text-tertiary)] font-normal">
+                                {opt.badge}
+                              </span>
+                            )}
+                            {isSelected && <Check size={12} className="text-sky-500 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Working Tree Diagram Navigation Button */}

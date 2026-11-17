@@ -184,11 +184,11 @@ export const openInIde = async (path: string, ide = 'vscode'): Promise<LaunchRes
   };
 };
 
-export const openInTerminal = async (path: string): Promise<LaunchResult> => {
+export const openInTerminal = async (path: string, terminal?: string): Promise<LaunchResult> => {
   if (isTauriEnvironment()) {
     try {
-      await invoke('open_in_terminal', { path });
-      return { success: true, message: 'Opened terminal' };
+      await invoke('open_in_terminal', { path, terminal: terminal || null });
+      return { success: true, message: `Opened ${terminal ? terminal.toUpperCase() : 'Terminal'}` };
     } catch (err) {
       console.error('Tauri invoke open_in_terminal failed:', err);
       return { success: false, message: String(err) };
@@ -197,7 +197,7 @@ export const openInTerminal = async (path: string): Promise<LaunchResult> => {
 
   return {
     success: true,
-    message: `[Preview] Opening terminal at "${path}"`,
+    message: `[Preview] Opening ${terminal || 'terminal'} at "${path}"`,
   };
 };
 

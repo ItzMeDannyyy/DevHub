@@ -25,10 +25,25 @@ pub struct GitRepoInfo {
 
 #[tauri::command]
 fn open_in_ide(path: String, ide: String) -> Result<String, String> {
-    let ide_cmd = match ide.to_lowercase().as_str() {
+    let ide_clean = ide.trim().to_lowercase();
+    let ide_cmd = match ide_clean.as_str() {
         "cursor" => "cursor",
         "zed" => "zed",
         "sublime" | "subl" => "subl",
+        "code-insiders" => "code-insiders",
+        "webstorm" => "webstorm",
+        "intellij" | "idea" => "idea",
+        "pycharm" => "pycharm",
+        "rustrover" => "rustrover",
+        "goland" => "goland",
+        "phpstorm" => "phpstorm",
+        "clion" => "clion",
+        "rider" => "rider",
+        "fleet" => "fleet",
+        "androidstudio" | "studio" => "studio",
+        "notepad++" | "notepadplusplus" => "notepad++",
+        "vscode" | "code" => "code",
+        other if !other.is_empty() => other,
         _ => "code",
     };
 
@@ -49,39 +64,125 @@ fn open_in_ide(path: String, ide: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to spawn IDE ({}): {}", ide_cmd, e))?;
     }
 
-    Ok(format!("Opened {} at {}", ide_cmd, path))
+    Ok(format!("Opened in {} at {}", ide_cmd, path))
 }
 
 #[tauri::command]
-fn open_in_terminal(path: String) -> Result<String, String> {
+fn open_in_terminal(path: String, terminal: Option<String>) -> Result<String, String> {
+    let term = terminal.unwrap_or_else(|| "default".into()).trim().to_lowercase();
+
     #[cfg(target_os = "windows")]
     {
-        // Try opening Windows Terminal, fallback to PowerShell
-        let wt_result = Command::new("cmd")
-            .args(["/C", "start", "wt", "-d", &path])
-            .spawn();
+        match term.as_str() {
+            "cmd" | "command prompt" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "cmd.exe", "/K", &format!("cd /d \"{}\"", path)])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open Command Prompt: {}", e))?;
+            }
+            "git-bash" | "bash" | "git bash" => {
+                let pf_git_bash = r"C:\Program Files\Git\git-bash.exe";
+                let pf_git_bash_x86 = r"C:\Program Files (x86)\Git\git-bash.exe";
 
-        if wt_result.is_err() {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "start",
-                    "powershell",
-                    "-NoExit",
-                    "-Command",
-                    &format!("Set-Location -LiteralPath '{}'", path),
-                ])
-                .spawn()
-                .map_err(|e| format!("Failed to open terminal: {}", e))?;
+                let launched = if std::path::Path::new(pf_git_bash).exists() {
+                    Command::new(pf_git_bash)
+                        .arg(format!("--cd={}", path))
+                        .spawn()
+                } else if std::path::Path::new(pf_git_bash_x86).exists() {
+                    Command::new(pf_git_bash_x86)
+                        .arg(format!("--cd={}", path))
+                        .spawn()
+                } else {
+                    Command::new("cmd")
+                        .args(["/C", "start", "", "git-bash.exe", &format!("--cd={}", path)])
+                        .spawn()
+                        .or_else(|_| {
+                            Command::new("cmd")
+                                .args(["/C", "start", "bash.exe", "-c", &format!("cd \"{}\" && exec bash", path)])
+                                .spawn()
+                        })
+                };
+
+                launched.map_err(|e| format!("Failed to open Git Bash: {}", e))?;
+            }
+            "wsl" | "ubuntu" | "debian" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "wsl.exe", "--cd", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open WSL: {}", e))?;
+            }
+            "pwsh" | "powershell 7" => {
+                Command::new("cmd")
+                    .args([
+                        "/C",
+                        "start",
+                        "pwsh.exe",
+                        "-NoExit",
+                        "-Command",
+                        &format!("Set-Location -LiteralPath '{}'", path),
+                    ])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open PowerShell 7: {}", e))?;
+            }
+            "wt" | "windows terminal" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "wt.exe", "-d", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open Windows Terminal: {}", e))?;
+            }
+            "powershell" | "windows powershell" => {
+                Command::new("cmd")
+                    .args([
+                        "/C",
+                        "start",
+                        "powershell.exe",
+                        "-NoExit",
+                        "-Command",
+                        &format!("Set-Location -LiteralPath '{}'", path),
+                    ])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open PowerShell: {}", e))?;
+            }
+            _ => {
+                // Default: Try Windows Terminal first, fallback to PowerShell
+                let wt_result = Command::new("cmd")
+                    .args(["/C", "start", "wt.exe", "-d", &path])
+                    .spawn();
+
+                if wt_result.is_err() {
+                    Command::new("cmd")
+                        .args([
+                            "/C",
+                            "start",
+                            "powershell.exe",
+                            "-NoExit",
+                            "-Command",
+                            &format!("Set-Location -LiteralPath '{}'", path),
+                        ])
+                        .spawn()
+                        .map_err(|e| format!("Failed to open terminal: {}", e))?;
+                }
+            }
         }
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .args(["-a", "Terminal", &path])
-            .spawn()
-            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+        match term.as_str() {
+            "iterm" | "iterm2" => {
+                Command::new("open")
+                    .args(["-a", "iTerm", &path])
+                    .spawn()
+                    .or_else(|_| Command::new("open").args(["-a", "Terminal", &path]).spawn())
+                    .map_err(|e| format!("Failed to open terminal: {}", e))?;
+            }
+            _ => {
+                Command::new("open")
+                    .args(["-a", "Terminal", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open terminal: {}", e))?;
+            }
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -97,7 +198,7 @@ fn open_in_terminal(path: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to open terminal: {}", e))?;
     }
 
-    Ok(format!("Terminal opened at {}", path))
+    Ok(format!("Opened {} at {}", term, path))
 }
 
 #[tauri::command]

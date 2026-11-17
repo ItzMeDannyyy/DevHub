@@ -177,7 +177,7 @@ export function App() {
   }, [activeNavTab, treeProject]);
 
   // Launch Handlers with path validation guard
-  const handleOpenIde = async (p: Project) => {
+  const handleOpenIde = async (p: Project, customIde?: string) => {
     if (p.path) {
       const val = await validateDirectoryPath(p.path);
       if (!val.isValid) {
@@ -185,7 +185,8 @@ export function App() {
         return;
       }
     }
-    const res = await openInIde(p.path, settings.preferredIde);
+    const targetIde = customIde || settings.preferredIde || 'vscode';
+    const res = await openInIde(p.path, targetIde);
     showToast(res.message);
 
     const updated = projects.map((item) =>
@@ -194,7 +195,7 @@ export function App() {
     updateProjectsState(updated);
   };
 
-  const handleOpenTerminal = async (p: Project) => {
+  const handleOpenTerminal = async (p: Project, customTerminal?: string) => {
     if (p.path) {
       const val = await validateDirectoryPath(p.path);
       if (!val.isValid) {
@@ -202,7 +203,8 @@ export function App() {
         return;
       }
     }
-    const res = await openInTerminal(p.path);
+    const targetTerminal = customTerminal || settings.defaultTerminal || 'powershell';
+    const res = await openInTerminal(p.path, targetTerminal);
     showToast(res.message);
   };
 
