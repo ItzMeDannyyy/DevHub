@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Check,
 } from 'lucide-react';
 import { UserSettings, Project } from '../types';
 import { CustomSelect, SelectOption } from './CustomSelect';
@@ -390,9 +391,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="grid grid-cols-3 gap-3">
                     {(
                       [
-                        { mode: 'dark', label: 'Dark Mode', icon: <Moon size={16} />, desc: 'Pitch Black' },
-                        { mode: 'light', label: 'Light Mode', icon: <Sun size={16} />, desc: 'Paper White' },
-                        { mode: 'system', label: 'System Mode', icon: <Monitor size={16} />, desc: 'Follows OS' },
+                        {
+                          mode: 'dark',
+                          label: 'Dark Mode',
+                          icon: (sel: boolean) => (
+                            <Moon
+                              size={16}
+                              className={
+                                sel ? 'text-indigo-400' : 'text-[var(--text-secondary)]'
+                              }
+                            />
+                          ),
+                          desc: 'Pitch Black',
+                        },
+                        {
+                          mode: 'light',
+                          label: 'Light Mode',
+                          icon: (sel: boolean) => (
+                            <Sun
+                              size={16}
+                              className={
+                                sel ? 'text-amber-500' : 'text-[var(--text-secondary)]'
+                              }
+                            />
+                          ),
+                          desc: 'Paper White',
+                        },
+                        {
+                          mode: 'system',
+                          label: 'System Mode',
+                          icon: (sel: boolean) => (
+                            <Monitor
+                              size={16}
+                              className={
+                                sel ? 'text-sky-400' : 'text-[var(--text-secondary)]'
+                              }
+                            />
+                          ),
+                          desc: 'Follows OS',
+                        },
                       ] as const
                     ).map((item) => {
                       const isSelected = settings.theme === item.mode;
@@ -402,18 +439,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           onClick={() => onUpdateSettings({ ...settings, theme: item.mode })}
                           className={`monochrome-btn p-3 rounded-lg border text-left flex flex-col justify-between transition-all cursor-pointer ${
                             isSelected
-                              ? 'border-[var(--text-primary)] bg-[var(--bg-card)] shadow-xs'
-                              : 'border-[var(--border-color)] bg-[var(--bg-canvas)] opacity-70 hover:opacity-100'
+                              ? 'border-sky-500 bg-sky-500/10 dark:border-sky-400 dark:bg-sky-500/15 shadow-xs'
+                              : 'border-[var(--border-color)] bg-[var(--bg-canvas)] opacity-70 hover:opacity-100 hover:border-[var(--border-hover)]'
                           }`}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[var(--text-primary)]">{item.icon}</span>
+                            <span>{item.icon(isSelected)}</span>
                             {isSelected && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-primary)]"></span>
+                              <Check size={14} className="text-sky-500 dark:text-sky-400" />
                             )}
                           </div>
                           <div>
-                            <div className="text-xs font-medium font-mono text-[var(--text-primary)]">
+                            <div
+                              className={`text-xs font-medium font-mono ${
+                                isSelected
+                                  ? 'text-sky-600 dark:text-sky-300 font-semibold'
+                                  : 'text-[var(--text-primary)]'
+                              }`}
+                            >
                               {item.label}
                             </div>
                             <div className="text-[10px] font-mono text-[var(--text-tertiary)] mt-0.5">

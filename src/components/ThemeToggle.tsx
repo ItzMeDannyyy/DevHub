@@ -11,14 +11,45 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   theme,
   onThemeChange,
 }) => {
-  const modes: { mode: ThemeMode; label: string; icon: React.ReactNode }[] = [
-    { mode: 'light', label: 'Light', icon: <Sun size={13} /> },
-    { mode: 'dark', label: 'Dark', icon: <Moon size={13} /> },
-    { mode: 'system', label: 'System', icon: <Monitor size={13} /> },
+  const modes: {
+    mode: ThemeMode;
+    label: string;
+    icon: (isActive: boolean) => React.ReactNode;
+  }[] = [
+    {
+      mode: 'light',
+      label: 'Light',
+      icon: (active) => (
+        <Sun
+          size={13}
+          className={active ? 'text-amber-500' : 'text-inherit'}
+        />
+      ),
+    },
+    {
+      mode: 'dark',
+      label: 'Dark',
+      icon: (active) => (
+        <Moon
+          size={13}
+          className={active ? 'text-indigo-400' : 'text-inherit'}
+        />
+      ),
+    },
+    {
+      mode: 'system',
+      label: 'System',
+      icon: (active) => (
+        <Monitor
+          size={13}
+          className={active ? 'text-sky-400' : 'text-inherit'}
+        />
+      ),
+    },
   ];
 
   return (
-    <div className="inline-flex items-center rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] p-0.5">
+    <div className="inline-flex items-center rounded-lg border border-[var(--border-color)] bg-[var(--bg-canvas)] p-1 gap-0.5 shadow-2xs">
       {modes.map((item) => {
         const isActive = theme === item.mode;
         return (
@@ -26,13 +57,13 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
             key={item.mode}
             onClick={() => onThemeChange(item.mode)}
             title={`Switch to ${item.label} mode`}
-            className={`monochrome-btn inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-mono transition-all cursor-pointer ${
+            className={`monochrome-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono font-medium transition-all cursor-pointer ${
               isActive
-                ? 'bg-[var(--active-pill-bg)] text-[var(--active-pill-text)] shadow-xs'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                ? 'bg-white text-zinc-900 border border-zinc-200/90 shadow-xs font-semibold dark:bg-[#30363d] dark:text-[#f0f6fc] dark:border-[#6e7681]/50 dark:shadow-sm'
+                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] border border-transparent'
             }`}
           >
-            {item.icon}
+            {item.icon(isActive)}
             <span className="hidden sm:inline">{item.label}</span>
           </button>
         );

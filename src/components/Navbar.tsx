@@ -73,9 +73,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const getThemeIcon = () => {
-    if (theme === 'light') return <Sun size={15} />;
-    if (theme === 'dark') return <Moon size={15} />;
-    return <Monitor size={15} />;
+    if (theme === 'light') return <Sun size={15} className="text-amber-500" />;
+    if (theme === 'dark') return <Moon size={15} className="text-indigo-400" />;
+    return <Monitor size={15} className="text-sky-400" />;
   };
 
   return (
