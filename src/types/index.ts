@@ -83,3 +83,23 @@ export interface UserSettings {
   defaultTerminal: 'powershell' | 'terminal' | 'cmd';
   defaultProjectsDir?: string;
 }
+
+export interface AddRepoDraftServiceItem {
+  id: string;
+  name: string;
+  folder: string;
+  command: string;
+  isCustomFolder?: boolean;
+}
+
+export interface AddRepoDraft {
+  name: string;
+  path: string;
+  githubUrl: string;
+  category: Exclude<ProjectCategory, 'all'>;
+  priority: Priority;
+  deadline: string;
+  notes: string;
+  services: AddRepoDraftServiceItem[];
+  savedAt: string;
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   X,
   Folder,
@@ -17,7 +17,20 @@ import {
   AlertCircle,
   Tag,
 } from 'lucide-react';
-import { Project, ProjectCategory, Priority, ProjectService, getProjectServices } from '../types';
+import {
+  Project,
+  ProjectCategory,
+  Priority,
+  ProjectService,
+  getProjectServices,
+  AddRepoDraft,
+} from '../types';
+import {
+  saveRepoDraft,
+  loadRepoDraft,
+  clearRepoDraft,
+  isDraftMeaningful,
+} from '../services/storage';
 import { CustomSelect, SelectOption } from './CustomSelect';
 import { CustomDateTimePicker } from './CustomDateTimePicker';
 import { CategoryBadge, PriorityBadge } from './Badges';
@@ -35,6 +48,8 @@ interface AddProjectModalProps {
   onClose: () => void;
   onSave: (projectData: Partial<Project>) => void;
   initialProject?: Project | null;
+  onDraftChange?: (hasDraft: boolean) => void;
+  onDraftSavedNotify?: () => void;
 }
 
 interface ServiceFormItem {
@@ -131,6 +146,8 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   onClose,
   onSave,
   initialProject,
+  onDraftChange,
+  onDraftSavedNotify,
 }) => {
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
@@ -150,6 +167,10 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       command: 'npm run dev',
     },
   ]);
+
+  // Draft restoration state & initialization guard
+  const [isRestoredDraft, setIsRestoredDraft] = useState(false);
+  const isInitializedRef = useRef(false);
 
   // Path validity verification state & submission state
   const [pathValidation, setPathValidation] = useState<{
@@ -336,6 +357,11 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
+    }
+
     if (initialProject) {
       setName(initialProject.name);
       setPath(initialProject.path);
@@ -345,6 +371,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       setDeadline(initialProject.deadline || '');
       setNotes(initialProject.notes || '');
       setSubmitError(null);
+      setIsRestoredDraft(false);
       validateAndScan(initialProject.path);
 
       const initialServices = getProjectServices(initialProject);
@@ -357,39 +384,172 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           isCustomFolder: false,
         }))
       );
+      isInitializedRef.current = true;
     } else {
-      setName('');
-      setPath('');
-      setGithubUrl('');
-      setCategory('work');
-      setPriority('medium');
-      setDeadline('');
-      setNotes('');
-      setSubmitError(null);
-      setPathValidation({ status: 'idle' });
-      setDetectedFolders([]);
-      setServices([
-        {
-          id: 'srv-1',
-          name: 'Frontend',
-          folder: './',
-          command: 'npm run dev',
-          isCustomFolder: false,
-        },
-      ]);
+      // Check if a saved draft exists
+      const draft = loadRepoDraft();
+      if (draft && isDraftMeaningful(draft)) {
+        setName(draft.name || '');
+        setPath(draft.path || '');
+        setGithubUrl(draft.githubUrl || '');
+        setCategory(draft.category || 'work');
+        setPriority(draft.priority || 'medium');
+        setDeadline(draft.deadline || '');
+        setNotes(draft.notes || '');
+        setSubmitError(null);
+        setIsRestoredDraft(true);
+        if (draft.services && draft.services.length > 0) {
+          setServices(draft.services);
+        } else {
+          setServices([
+            {
+              id: 'srv-1',
+              name: 'Frontend',
+              folder: './',
+              command: 'npm run dev',
+              isCustomFolder: false,
+            },
+          ]);
+        }
+        if (draft.path) {
+          validateAndScan(draft.path);
+        }
+      } else {
+        setName('');
+        setPath('');
+        setGithubUrl('');
+        setCategory('work');
+        setPriority('medium');
+        setDeadline('');
+        setNotes('');
+        setSubmitError(null);
+        setPathValidation({ status: 'idle' });
+        setDetectedFolders([]);
+        setIsRestoredDraft(false);
+        setServices([
+          {
+            id: 'srv-1',
+            name: 'Frontend',
+            folder: './',
+            command: 'npm run dev',
+            isCustomFolder: false,
+          },
+        ]);
+      }
+      isInitializedRef.current = true;
     }
   }, [initialProject, isOpen, validateAndScan]);
+
+  // Auto-save form inputs to localStorage draft on change
+  useEffect(() => {
+    if (!isOpen || initialProject || !isInitializedRef.current) return;
+
+    const currentDraft: AddRepoDraft = {
+      name,
+      path,
+      githubUrl,
+      category,
+      priority,
+      deadline,
+      notes,
+      services,
+      savedAt: new Date().toISOString(),
+    };
+
+    if (isDraftMeaningful(currentDraft)) {
+      saveRepoDraft(currentDraft);
+      onDraftChange?.(true);
+    } else {
+      clearRepoDraft();
+      onDraftChange?.(false);
+      setIsRestoredDraft(false);
+    }
+  }, [
+    name,
+    path,
+    githubUrl,
+    category,
+    priority,
+    deadline,
+    notes,
+    services,
+    isOpen,
+    initialProject,
+    onDraftChange,
+  ]);
+
+  // Explicitly discard saved draft and clear form
+  const handleDiscardDraft = () => {
+    clearRepoDraft();
+    onDraftChange?.(false);
+    setName('');
+    setPath('');
+    setGithubUrl('');
+    setCategory('work');
+    setPriority('medium');
+    setDeadline('');
+    setNotes('');
+    setSubmitError(null);
+    setPathValidation({ status: 'idle' });
+    setDetectedFolders([]);
+    setIsRestoredDraft(false);
+    setServices([
+      {
+        id: 'srv-1',
+        name: 'Frontend',
+        folder: './',
+        command: 'npm run dev',
+        isCustomFolder: false,
+      },
+    ]);
+  };
+
+  // Safe close handler that guarantees draft persistence when adding a repo
+  const handleClose = useCallback(() => {
+    if (!initialProject && isInitializedRef.current) {
+      const currentDraft: AddRepoDraft = {
+        name,
+        path,
+        githubUrl,
+        category,
+        priority,
+        deadline,
+        notes,
+        services,
+        savedAt: new Date().toISOString(),
+      };
+      if (isDraftMeaningful(currentDraft)) {
+        saveRepoDraft(currentDraft);
+        onDraftChange?.(true);
+        onDraftSavedNotify?.();
+      }
+    }
+    onClose();
+  }, [
+    initialProject,
+    name,
+    path,
+    githubUrl,
+    category,
+    priority,
+    deadline,
+    notes,
+    services,
+    onDraftChange,
+    onDraftSavedNotify,
+    onClose,
+  ]);
 
   // Escape key listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   if (!isRendered) return null;
 
@@ -472,6 +632,12 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
         command: (s.command || 'npm run dev').trim(),
       }));
 
+      if (!initialProject) {
+        clearRepoDraft();
+        onDraftChange?.(false);
+        setIsRestoredDraft(false);
+      }
+
       onSave({
         ...(initialProject ? { id: initialProject.id } : {}),
         name: trimmedName,
@@ -498,7 +664,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       className={`fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out ${
         isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
         {/* Slide-over Drawer Panel (Right to Left) */}
@@ -521,7 +687,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
             >
               <X size={18} />
@@ -530,6 +696,31 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
           {/* Form Content */}
           <form onSubmit={handleSubmit} className="p-6 pb-28 space-y-5 flex-1 overflow-y-auto">
+            {/* Restored Draft Banner */}
+            {isRestoredDraft && !initialProject && (
+              <div className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs font-mono flex items-center justify-between gap-3 animate-fade-in shadow-2xs">
+                <div className="flex items-center gap-2.5 text-amber-500 dark:text-amber-400 min-w-0">
+                  <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-amber-600 dark:text-amber-300 uppercase tracking-wide text-[11px] block">
+                      Unsaved Draft Restored
+                    </span>
+                    <span className="text-[11px] text-[var(--text-secondary)] truncate block">
+                      Recovered your previously entered repository data and configured services.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-amber-500/30 hover:border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-300 text-xs font-mono font-medium cursor-pointer transition-all shrink-0"
+                  title="Discard saved draft and reset all fields"
+                >
+                  <Trash2 size={13} />
+                  <span>Discard</span>
+                </button>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium font-mono uppercase text-[var(--text-secondary)] mb-1.5">
                 Project Name *
@@ -1031,35 +1222,49 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[var(--border-color)]">
-              <button
-                type="button"
-                onClick={onClose}
-                className="monochrome-btn px-4 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || pathValidation.status === 'invalid'}
-                className={`monochrome-btn inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium transition-all shadow-xs ${
-                  isSubmitting || pathValidation.status === 'invalid'
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:opacity-90 cursor-pointer'
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw size={13} className="animate-spin" />
-                    <span>Verifying Path...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save size={13} />
-                    <span>{initialProject ? 'Save Changes' : 'Add Repository'}</span>
-                  </>
+            <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]">
+              <div>
+                {isRestoredDraft && !initialProject && (
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-500/30 hover:border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 text-xs font-mono cursor-pointer transition-colors"
+                  >
+                    <Trash2 size={13} />
+                    <span>Discard Draft</span>
+                  </button>
                 )}
-              </button>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="monochrome-btn px-4 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || pathValidation.status === 'invalid'}
+                  className={`monochrome-btn inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium transition-all shadow-xs ${
+                    isSubmitting || pathValidation.status === 'invalid'
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:opacity-90 cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Verifying Path...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={13} />
+                      <span>{initialProject ? 'Save Changes' : 'Add Repository'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </div>

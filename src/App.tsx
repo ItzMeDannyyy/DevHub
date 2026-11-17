@@ -10,6 +10,7 @@ import {
   saveProjects,
   loadSettings,
   saveSettings,
+  loadRepoDraft,
   INITIAL_PROJECTS,
 } from './services/storage';
 import {
@@ -43,6 +44,7 @@ export function App() {
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [hasRepoDraft, setHasRepoDraft] = useState<boolean>(() => loadRepoDraft() !== null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [treeProject, setTreeProject] = useState<Project | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -585,6 +587,11 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         theme={settings.theme}
         onThemeChange={handleThemeChange}
+        hasRepoDraft={hasRepoDraft}
+        onResumeDraft={() => {
+          setEditingProject(null);
+          setIsAddModalOpen(true);
+        }}
       />
 
       {/* Main Content Area (Spaced for Floating Oval Header) */}
@@ -767,6 +774,10 @@ export function App() {
         }}
         onSave={handleSaveProject}
         initialProject={editingProject}
+        onDraftChange={(draftExists) => setHasRepoDraft(draftExists)}
+        onDraftSavedNotify={() => {
+          showToast('Repository draft auto-saved. Click "Resume Draft" in the header anytime.');
+        }}
       />
 
       {/* Preferences / Settings Modal */}
