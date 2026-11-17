@@ -974,7 +974,7 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
               </div>
             </div>
 
-            {/* Run Services */}
+            {/* Run Service and Commands */}
             <div className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-subtle)]">
               {/* Process Controller Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 pb-2.5 border-b border-[var(--border-color)]">
@@ -982,7 +982,7 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                   <div className="flex items-center gap-1.5">
                     <Server size={13} className="text-[var(--text-primary)]" />
                     <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-primary)] font-semibold">
-                      Run Services
+                      Run Service and Commands
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1">
