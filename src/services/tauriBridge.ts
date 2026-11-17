@@ -483,6 +483,7 @@ export interface GitRepoInfo {
   uncommittedCount: number;
   lastCommitMessage: string;
   isClean: boolean;
+  remoteUrl?: string;
 }
 
 export const inspectGitRepo = async (path: string): Promise<GitRepoInfo | null> => {
@@ -495,6 +496,7 @@ export const inspectGitRepo = async (path: string): Promise<GitRepoInfo | null> 
         uncommitted_count: number;
         last_commit_message: string;
         is_clean: boolean;
+        remote_url?: string;
       };
 
       return {
@@ -502,6 +504,7 @@ export const inspectGitRepo = async (path: string): Promise<GitRepoInfo | null> 
         uncommittedCount: info.uncommitted_count,
         lastCommitMessage: info.last_commit_message,
         isClean: info.is_clean,
+        remoteUrl: info.remote_url || undefined,
       };
     } catch (err) {
       console.warn('Failed to inspect git repo via Tauri:', err);
@@ -550,6 +553,7 @@ export const switchGitBranch = async (
         uncommitted_count: number;
         last_commit_message: string;
         is_clean: boolean;
+        remote_url?: string;
       };
 
       return {
@@ -559,6 +563,7 @@ export const switchGitBranch = async (
           uncommittedCount: info.uncommitted_count,
           lastCommitMessage: info.last_commit_message,
           isClean: info.is_clean,
+          remoteUrl: info.remote_url || undefined,
         },
       };
     } catch (err: any) {
@@ -576,6 +581,81 @@ export const switchGitBranch = async (
       isClean: true,
     },
   };
+};
+
+/**
+ * Retrieve the configured Git remote origin URL from disk.
+ */
+export const getGitRemoteUrl = async (path: string): Promise<string | null> => {
+  if (!path || !path.trim()) return null;
+
+  if (isTauriEnvironment()) {
+    try {
+      const url = (await invoke('get_git_remote_url', { path: path.trim() })) as string | null;
+      return url ? url.trim() : null;
+    } catch (err) {
+      console.warn('Failed to get git remote url:', err);
+      return null;
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Set or update the Git remote origin URL on disk for the repository.
+ */
+export const setGitRemoteUrl = async (path: string, url: string): Promise<string> => {
+  if (!path || !path.trim()) throw new Error('Path is required');
+
+  if (isTauriEnvironment()) {
+    return (await invoke('set_git_remote_url', {
+      path: path.trim(),
+      url: url.trim(),
+    })) as string;
+  }
+
+  return url.trim();
+};
+
+/**
+ * Convert any Git remote URL (SSH, HTTPS with auth/token, shorthand, .git)
+ * to a clean, browser-accessible HTTP(S) URL.
+ */
+export const formatRepoWebUrl = (raw: string): string => {
+  if (!raw) return '';
+  let url = raw.trim();
+
+  // If SSH format: git@github.com:owner/repo(.git)
+  if (url.startsWith('git@') || (url.includes('@') && url.includes(':') && !url.startsWith('http'))) {
+    const match = url.match(/@([^:]+):(.+?)(\.git)?$/);
+    if (match) {
+      return `https://${match[1]}/${match[2]}`;
+    }
+  }
+
+  // If starts with ssh://git@host/owner/repo
+  if (url.startsWith('ssh://')) {
+    url = url.replace(/^ssh:\/\/(?:[^@]+@)?/, 'https://');
+  }
+
+  // Remove username/auth from https://username@github.com/...
+  url = url.replace(/^(https?:\/\/)[^@]+@/, '$1');
+
+  // Remove trailing .git
+  url = url.replace(/\.git$/, '');
+
+  // If shorthand: "owner/repo"
+  if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(url)) {
+    return `https://github.com/${url}`;
+  }
+
+  // If missing protocol
+  if (!/^https?:\/\//i.test(url)) {
+    url = `https://${url}`;
+  }
+
+  return url;
 };
 
 export const checkProcessRunning = async (pid: number): Promise<boolean> => {

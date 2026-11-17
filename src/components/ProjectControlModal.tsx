@@ -15,7 +15,7 @@ import {
   Star,
   Edit3,
   Trash2,
-  Activity,
+  Server,
   Folder,
   Layers,
   FolderTree,
@@ -28,10 +28,15 @@ import {
 import { Project, getProjectServices } from '../types';
 import { formatDeadlineDisplay } from '../utils/date';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { GithubIcon } from './GithubIcon';
 import {
   validateDirectoryPath,
   listGitBranches,
   switchGitBranch,
+  openExternalUrl,
+  getGitRemoteUrl,
+  setGitRemoteUrl,
+  formatRepoWebUrl,
 } from '../services/tauriBridge';
 
 interface ProjectControlModalProps {
@@ -51,6 +56,7 @@ interface ProjectControlModalProps {
   onDelete: (id: string) => void;
   onRefreshGit?: (p: Project) => void;
   onBranchSwitched?: (updatedProject: Project) => void;
+  onUpdateProject?: (updatedProject: Project) => void;
 }
 
 export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
@@ -70,12 +76,21 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
   onDelete,
   onRefreshGit,
   onBranchSwitched,
+  onUpdateProject,
 }) => {
   const [copied, setCopied] = useState(false);
   const [customCmds, setCustomCmds] = useState<Record<string, string>>({});
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isPathValid, setIsPathValid] = useState<boolean | null>(null);
+
+  // GitHub / Remote Repository URL states
+  const [detectedRemoteUrl, setDetectedRemoteUrl] = useState<string | null>(null);
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [customUrlInput, setCustomUrlInput] = useState('');
+  const [syncWithGitRemote, setSyncWithGitRemote] = useState(true);
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [urlSaveError, setUrlSaveError] = useState<string | null>(null);
 
   // Git Branch switching states
   const [branches, setBranches] = useState<string[]>([]);
@@ -88,6 +103,134 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
 
   const comboboxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Active repository URL resolution (user defined override -> git status remote -> live probed remote)
+  const activeRepoUrl = useMemo(() => {
+    if (project?.githubUrl && project.githubUrl.trim()) {
+      return project.githubUrl.trim();
+    }
+    if (project?.gitStatus?.remoteUrl && project.gitStatus.remoteUrl.trim()) {
+      return project.gitStatus.remoteUrl.trim();
+    }
+    return detectedRemoteUrl || null;
+  }, [project?.githubUrl, project?.gitStatus?.remoteUrl, detectedRemoteUrl]);
+
+  const browserWebUrl = useMemo(() => {
+    return activeRepoUrl ? formatRepoWebUrl(activeRepoUrl) : null;
+  }, [activeRepoUrl]);
+
+  // Query git remote origin if not already stored
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && project?.path) {
+      if (!project.githubUrl && !project.gitStatus?.remoteUrl) {
+        getGitRemoteUrl(project.path).then((url) => {
+          if (isMounted) {
+            setDetectedRemoteUrl(url);
+          }
+        });
+      } else {
+        setDetectedRemoteUrl(null);
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, project?.path, project?.githubUrl, project?.gitStatus?.remoteUrl]);
+
+  const handleOpenGitHub = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (browserWebUrl) {
+      openExternalUrl(browserWebUrl);
+    }
+  };
+
+  const handleOpenUrlEditor = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCustomUrlInput(activeRepoUrl || '');
+    setUrlSaveError(null);
+    setIsEditingUrl(true);
+  };
+
+  const handleSaveRepoUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project) return;
+    setIsSavingUrl(true);
+    setUrlSaveError(null);
+
+    const cleanInput = customUrlInput.trim();
+    const formattedWeb = cleanInput ? formatRepoWebUrl(cleanInput) : '';
+
+    try {
+      if (syncWithGitRemote && project.path) {
+        try {
+          await setGitRemoteUrl(project.path, cleanInput);
+        } catch (err: any) {
+          console.warn('Could not set git remote origin:', err);
+        }
+      }
+
+      const updated: Project = {
+        ...project,
+        githubUrl: formattedWeb || undefined,
+        gitStatus: project.gitStatus
+          ? {
+              ...project.gitStatus,
+              remoteUrl: cleanInput || undefined,
+            }
+          : undefined,
+      };
+
+      setDetectedRemoteUrl(cleanInput || null);
+      if (onUpdateProject) {
+        onUpdateProject(updated);
+      }
+      setIsEditingUrl(false);
+    } catch (err: any) {
+      setUrlSaveError(
+        typeof err === 'string' ? err : err?.message || 'Failed to save repository URL'
+      );
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
+
+  const handleRemoveRepoUrl = async () => {
+    if (!project) return;
+    setIsSavingUrl(true);
+    setUrlSaveError(null);
+    try {
+      if (syncWithGitRemote && project.path) {
+        try {
+          await setGitRemoteUrl(project.path, '');
+        } catch {
+          // ignore
+        }
+      }
+      const updated: Project = {
+        ...project,
+        githubUrl: undefined,
+        gitStatus: project.gitStatus
+          ? {
+              ...project.gitStatus,
+              remoteUrl: undefined,
+            }
+          : undefined,
+      };
+      setDetectedRemoteUrl(null);
+      setCustomUrlInput('');
+      if (onUpdateProject) {
+        onUpdateProject(updated);
+      }
+      setIsEditingUrl(false);
+    } catch (err: any) {
+      setUrlSaveError(
+        typeof err === 'string' ? err : err?.message || 'Failed to remove repository URL'
+      );
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
 
   // Sync branchSearch when project's current branch changes
   useEffect(() => {
@@ -311,9 +454,13 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
           }`}
         >
           {/* Header */}
-          <div className="flex items-start justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0">
-            <div>
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <div className="flex items-start justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0 gap-3">
+            {/* Title First, Badges Below */}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--text-primary)] truncate font-sans">
+                {project.name}
+              </h2>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <CategoryBadge category={project.category} size="sm" />
                 <PriorityBadge priority={project.priority} size="sm" />
                 {project.deadline && (
@@ -323,34 +470,193 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                   </span>
                 )}
               </div>
-              <h2 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
-                {project.name}
-              </h2>
             </div>
 
-            <div className="flex items-center gap-1">
+            {/* Header Action Buttons (Balanced, Clean Size) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* GitHub Repo Button or Add GitHub URL Button */}
+              {browserWebUrl ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleOpenGitHub}
+                    className="monochrome-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-sky-500/50 hover:bg-sky-500/10 text-xs font-mono font-medium transition-all cursor-pointer shadow-2xs group"
+                    title={`Open GitHub repository in browser: ${browserWebUrl}`}
+                  >
+                    <GithubIcon size={14} className="text-sky-500 shrink-0 group-hover:scale-110 transition-transform" />
+                    <span className="hidden sm:inline font-semibold">GitHub</span>
+                    <ExternalLink size={11} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)] shrink-0" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenUrlEditor}
+                    className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-canvas)] transition-all cursor-pointer shadow-2xs"
+                    title="Edit repository URL"
+                  >
+                    <Edit3 size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenUrlEditor}
+                  className="monochrome-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-[var(--border-color)] hover:border-sky-500/50 bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-sky-500/5 text-xs font-mono font-medium transition-all cursor-pointer shadow-2xs group"
+                  title="Link a GitHub repository URL to this project"
+                >
+                  <GithubIcon size={14} className="text-sky-500 shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="hidden sm:inline font-medium">Add GitHub Repo</span>
+                  <span className="sm:hidden font-medium">GitHub</span>
+                </button>
+              )}
+
+              {/* Star Favorite Button */}
               <button
+                type="button"
                 onClick={() => onToggleFavorite(project.id)}
-                className={`p-1.5 rounded-full hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer ${
+                className={`p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-canvas)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs ${
                   project.favorite
-                    ? 'text-amber-400 fill-amber-400'
+                    ? 'text-amber-400 fill-amber-400 border-amber-500/30 bg-amber-500/5'
                     : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
                 }`}
                 title={project.favorite ? 'Unstar' : 'Star'}
               >
                 <Star
-                  size={16}
+                  size={15}
                   fill={project.favorite ? 'currentColor' : 'none'}
                 />
               </button>
+
+              {/* Close (X) Button */}
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-canvas)] hover:border-[var(--border-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer shadow-2xs"
+                title="Close drawer (Esc)"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
+
+          {/* Edit Repository URL Popover Modal */}
+          {isEditingUrl && (
+            <div
+              className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+              onClick={() => setIsEditingUrl(false)}
+            >
+              <div
+                className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)]">
+                  <div className="flex items-center gap-2">
+                    <GithubIcon size={16} className="text-sky-500" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)] font-sans">
+                      {activeRepoUrl ? 'Edit GitHub URL' : 'Link GitHub Repository'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(false)}
+                    className="p-1 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveRepoUrl} className="p-5 space-y-4">
+                  <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
+                    Enter the GitHub repository link (or clone URL) for <strong>{project.name}</strong>.
+                  </p>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-[var(--text-secondary)] mb-1.5">
+                      Repository URL
+                    </label>
+                    <div className="relative">
+                      <GithubIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="https://github.com/username/project or owner/repo"
+                        value={customUrlInput}
+                        onChange={(e) => setCustomUrlInput(e.target.value)}
+                        className="monochrome-input w-full pl-9 pr-3.5 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                      />
+                    </div>
+                    {customUrlInput.trim() && (
+                      <div className="mt-2 p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-tertiary)] flex items-center justify-between">
+                        <span className="truncate pr-2 text-sky-500">
+                          {formatRepoWebUrl(customUrlInput)}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold shrink-0">Web Preview</span>
+                      </div>
+                    )}
+                    {urlSaveError && (
+                      <p className="mt-1.5 text-xs font-mono text-rose-500">
+                        {urlSaveError}
+                      </p>
+                    )}
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={syncWithGitRemote}
+                      onChange={(e) => setSyncWithGitRemote(e.target.checked)}
+                      className="mt-0.5 rounded border-[var(--border-color)] accent-sky-500"
+                    />
+                    <span className="text-xs text-[var(--text-secondary)] font-sans">
+                      Also set as Git remote origin on disk (<code>git remote set-url origin</code>)
+                    </span>
+                  </label>
+
+                  <div className="pt-2 flex items-center justify-between border-t border-[var(--border-color)]">
+                    {activeRepoUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveRepoUrl}
+                        disabled={isSavingUrl}
+                        className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-500/30 hover:border-rose-500/60 bg-rose-500/10 text-rose-500 text-xs font-mono cursor-pointer transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        <span>Remove Link</span>
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingUrl(false)}
+                        className="monochrome-btn px-3 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-subtle)] text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingUrl}
+                        className="monochrome-btn inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs disabled:opacity-50"
+                      >
+                        {isSavingUrl ? (
+                          <>
+                            <RefreshCw size={12} className="animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check size={12} />
+                            <span>Save URL</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* Drawer Body */}
           <div className="p-6 space-y-6 flex-1 overflow-y-auto">
@@ -668,15 +974,15 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
               </div>
             </div>
 
-            {/* Services & Process Controller */}
+            {/* Run Services */}
             <div className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-subtle)]">
               {/* Process Controller Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 pb-2.5 border-b border-[var(--border-color)]">
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <Activity size={13} className="text-[var(--text-primary)]" />
+                    <Server size={13} className="text-[var(--text-primary)]" />
                     <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-primary)] font-semibold">
-                      Services & Process Controller
+                      Run Services
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1">

@@ -12,6 +12,7 @@ export interface GitStatus {
   lastCommitTime: string;
   lastCommitMessage: string;
   isClean: boolean;
+  remoteUrl?: string;
 }
 
 export interface RunningProcess {
@@ -67,6 +68,7 @@ export interface Project {
   devCommand?: string;
   runningProcess?: RunningProcess;
   gitStatus?: GitStatus;
+  githubUrl?: string;
   lastOpenedAt?: string;
   createdAt: string;
 }

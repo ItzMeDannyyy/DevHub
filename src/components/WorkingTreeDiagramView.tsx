@@ -270,7 +270,7 @@ export const WorkingTreeDiagramView: React.FC<WorkingTreeDiagramViewProps> = ({
             <span className="w-6 h-6 rounded-md bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-primary)]">
               <FolderTree size={13} />
             </span>
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-mono">
+            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-sans">
               {project.name}
             </h1>
             <CategoryBadge category={project.category} size="sm" />

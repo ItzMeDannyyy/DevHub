@@ -20,6 +20,7 @@ pub struct GitRepoInfo {
     pub uncommitted_count: usize,
     pub last_commit_message: String,
     pub is_clean: bool,
+    pub remote_url: Option<String>,
 }
 
 #[tauri::command]
@@ -142,6 +143,7 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
             uncommitted_count: 0,
             last_commit_message: "No git tracking initialized".into(),
             is_clean: true,
+            remote_url: None,
         });
     }
 
@@ -174,6 +176,44 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
         .trim()
         .to_string();
 
+    // 4. Get remote origin URL
+    let remote_url = {
+        let output = hidden_command("git")
+            .args(["-C", &path, "remote", "get-url", "origin"])
+            .output();
+
+        if let Ok(out) = output {
+            if out.status.success() {
+                let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !url.is_empty() {
+                    Some(url)
+                } else {
+                    None
+                }
+            } else {
+                let config_out = hidden_command("git")
+                    .args(["-C", &path, "config", "--get", "remote.origin.url"])
+                    .output();
+                if let Ok(co) = config_out {
+                    if co.status.success() {
+                        let url = String::from_utf8_lossy(&co.stdout).trim().to_string();
+                        if !url.is_empty() {
+                            Some(url)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     Ok(GitRepoInfo {
         branch: if branch.is_empty() {
             "main".into()
@@ -187,7 +227,82 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
             last_commit_message
         },
         is_clean: uncommitted_count == 0,
+        remote_url,
     })
+}
+
+#[tauri::command]
+fn get_git_remote_url(path: String) -> Result<Option<String>, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.join(".git").exists() {
+        return Ok(None);
+    }
+
+    let output = hidden_command("git")
+        .args(["-C", &path, "remote", "get-url", "origin"])
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !url.is_empty() {
+                return Ok(Some(url));
+            }
+        }
+    }
+
+    let config_output = hidden_command("git")
+        .args(["-C", &path, "config", "--get", "remote.origin.url"])
+        .output();
+
+    if let Ok(out) = config_output {
+        if out.status.success() {
+            let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !url.is_empty() {
+                return Ok(Some(url));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+#[tauri::command]
+fn set_git_remote_url(path: String, url: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.join(".git").exists() {
+        return Err("Directory is not a local git repository".into());
+    }
+
+    let clean_url = url.trim().to_string();
+    if clean_url.is_empty() {
+        let _ = hidden_command("git")
+            .args(["-C", &path, "remote", "remove", "origin"])
+            .output();
+        return Ok("".into());
+    }
+
+    let check = hidden_command("git")
+        .args(["-C", &path, "remote", "get-url", "origin"])
+        .output();
+
+    let has_origin = check.map(|o| o.status.success()).unwrap_or(false);
+
+    let res = if has_origin {
+        hidden_command("git")
+            .args(["-C", &path, "remote", "set-url", "origin", &clean_url])
+            .output()
+    } else {
+        hidden_command("git")
+            .args(["-C", &path, "remote", "add", "origin", &clean_url])
+            .output()
+    };
+
+    match res {
+        Ok(out) if out.status.success() => Ok(clean_url),
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        Err(e) => Err(format!("Failed to configure git remote: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -775,6 +890,8 @@ pub fn run() {
             inspect_git_repo,
             list_git_branches,
             switch_git_branch,
+            get_git_remote_url,
+            set_git_remote_url,
             start_dev_process,
             kill_process_by_pid,
             check_process_running,

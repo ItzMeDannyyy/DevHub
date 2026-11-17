@@ -20,10 +20,13 @@ import { Project, ProjectCategory, Priority, ProjectService, getProjectServices 
 import { CustomSelect, SelectOption } from './CustomSelect';
 import { CustomDateTimePicker } from './CustomDateTimePicker';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { GithubIcon } from './GithubIcon';
 import {
   listSubdirectories,
   validateDirectoryPath,
   selectFolderDialog,
+  getGitRemoteUrl,
+  formatRepoWebUrl,
 } from '../services/tauriBridge';
 
 interface AddProjectModalProps {
@@ -109,6 +112,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
   const [category, setCategory] = useState<Exclude<ProjectCategory, 'all'>>('work');
   const [priority, setPriority] = useState<Priority>('medium');
   const [deadline, setDeadline] = useState('');
@@ -211,6 +215,13 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           folderCount: res.subdirectoriesCount,
         });
 
+        // Automatically detect Git remote URL if user hasn't typed one
+        getGitRemoteUrl(clean).then((remote) => {
+          if (remote) {
+            setGithubUrl((prev) => (prev ? prev : remote));
+          }
+        });
+
         const dirs = await listSubdirectories(clean);
         setDetectedFolders(dirs);
       }
@@ -306,6 +317,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
     if (initialProject) {
       setName(initialProject.name);
       setPath(initialProject.path);
+      setGithubUrl(initialProject.githubUrl || initialProject.gitStatus?.remoteUrl || '');
       setCategory(initialProject.category);
       setPriority(initialProject.priority);
       setDeadline(initialProject.deadline || '');
@@ -326,6 +338,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
     } else {
       setName('');
       setPath('');
+      setGithubUrl('');
       setCategory('work');
       setPriority('medium');
       setDeadline('');
@@ -438,6 +451,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
         category,
         priority,
         deadline: deadline || undefined,
+        githubUrl: githubUrl.trim() ? formatRepoWebUrl(githubUrl.trim()) : undefined,
         services: sanitizedServices,
         devCommand: sanitizedServices[0]?.command || 'npm run dev',
         notes: notes.trim() || undefined,
@@ -469,7 +483,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0">
             <div>
-              <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
+              <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-sans">
                 {initialProject ? 'Edit Repository' : 'Add Repository'}
               </h2>
               <p className="text-xs font-mono text-[var(--text-tertiary)] mt-0.5">
@@ -654,6 +668,36 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   <span className="text-[11px]">Verifying path on disk...</span>
                 </div>
               )}
+            </div>
+
+            {/* GitHub / Remote Repository URL Field */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium font-mono uppercase text-[var(--text-secondary)]">
+                  GitHub / Remote URL (Optional)
+                </label>
+                {githubUrl.trim() && (
+                  <span className="text-[10px] text-sky-500 font-mono truncate max-w-[220px]">
+                    {formatRepoWebUrl(githubUrl)}
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <GithubIcon
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]"
+                />
+                <input
+                  type="text"
+                  placeholder="https://github.com/username/project or owner/repo"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  className="monochrome-input w-full pl-9 pr-3.5 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                />
+              </div>
+              <p className="mt-1 text-[10px] font-mono text-[var(--text-tertiary)]">
+                Auto-detected from Git if present. Enables 1-click browser redirect in the repository modal.
+              </p>
             </div>
 
             {/* Custom Category & Priority Dropdowns */}

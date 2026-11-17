@@ -53,7 +53,7 @@ On your first launch, DevHub automatically seeds a clean **"Sample Project"** po
 ---
 
 ### Step 3: Configure Multi-Service Commands
-In the **Services & Process Controller** section of the Add/Edit Repository drawer:
+In the **Run Services** (Services & Commands) section of the Add/Edit Repository drawer:
 1. Select the **Working Folder** for each service from the dropdown. DevHub dynamically scans and displays only real subfolders found on your disk (e.g., `./`, `./backend`, `./frontend`, `./src-tauri`).
 2. Enter the command to run (e.g., `npm run dev`, `cargo check`, `docker compose up`, or `python manage.py runserver`).
 3. Click **"Add Another Service"** to configure multiple processes that belong to the same repository.

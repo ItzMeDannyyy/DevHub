@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   FolderPlus,
   CheckCircle2,
-  Activity,
+  Server,
 } from 'lucide-react';
 import { Project, ProjectCategory, UserSettings, ThemeMode, NavigationTab, RunningProcess, getProjectServices } from './types';
 import {
@@ -632,7 +632,7 @@ export function App() {
                     }`}
                     title="View and manage all active services across repositories"
                   >
-                    <Activity
+                    <Server
                       size={13}
                       className={
                         totalActiveServicesCount > 0
@@ -738,6 +738,14 @@ export function App() {
           );
           updateProjectsState(newProjects);
           showToast(`Switched to branch "${updated.gitStatus?.branch}"`);
+        }}
+        onUpdateProject={(updated) => {
+          setSelectedProject(updated);
+          const newProjects = projects.map((item) =>
+            item.id === updated.id ? updated : item
+          );
+          updateProjectsState(newProjects);
+          showToast('Repository link updated');
         }}
       />
 
