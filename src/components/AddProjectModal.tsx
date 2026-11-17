@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
+  Tag,
 } from 'lucide-react';
 import { Project, ProjectCategory, Priority, ProjectService, getProjectServices } from '../types';
 import { CustomSelect, SelectOption } from './CustomSelect';
@@ -43,6 +44,27 @@ interface ServiceFormItem {
   command: string;
   isCustomFolder?: boolean;
 }
+
+export const inferServiceNameFromFolder = (folder: string, index: number = 0): string => {
+  if (!folder || folder === './' || folder === '.') {
+    return index === 0 ? 'Frontend' : 'Backend API';
+  }
+  const clean = folder.replace(/^\.\//, '').replace(/\/$/, '').trim();
+  if (!clean) return index === 0 ? 'Frontend' : 'Backend API';
+
+  const lower = clean.toLowerCase();
+  if (lower === 'src-tauri' || lower === 'tauri') return 'Desktop Core';
+  if (lower === 'backend' || lower === 'server' || lower === 'api') return 'Backend API';
+  if (lower === 'frontend' || lower === 'client' || lower === 'web' || lower === 'ui') return 'Frontend';
+  if (lower === 'docs' || lower === 'documentation') return 'Documentation';
+  if (lower === 'worker' || lower === 'jobs' || lower === 'queue') return 'Worker';
+
+  return clean
+    .split(/[-_/]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 const categoryOptions: SelectOption<Exclude<ProjectCategory, 'all'>>[] = [
   {
@@ -123,7 +145,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   const [services, setServices] = useState<ServiceFormItem[]>([
     {
       id: 'srv-1',
-      name: 'Main Service',
+      name: 'Frontend',
       folder: './',
       command: 'npm run dev',
     },
@@ -329,7 +351,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       setServices(
         initialServices.map((s, idx) => ({
           id: s.id || `srv-${idx + 1}`,
-          name: s.name || `Service ${idx + 1}`,
+          name: s.name || inferServiceNameFromFolder(s.folder || './', idx),
           folder: s.folder || './',
           command: s.command || 'npm run dev',
           isCustomFolder: false,
@@ -349,7 +371,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       setServices([
         {
           id: 'srv-1',
-          name: 'Main Service',
+          name: 'Frontend',
           folder: './',
           command: 'npm run dev',
           isCustomFolder: false,
@@ -373,12 +395,18 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleAddService = () => {
     const newId = `srv-${Date.now()}-${services.length + 1}`;
+    const unusedFolder =
+      detectedFolders.find(
+        (f) => f !== './' && !services.some((s) => s.folder === f)
+      ) || './';
+    const suggestedName = inferServiceNameFromFolder(unusedFolder, services.length);
+
     setServices([
       ...services,
       {
         id: newId,
-        name: `Service ${services.length + 1}`,
-        folder: './',
+        name: suggestedName,
+        folder: unusedFolder,
         command: 'npm run dev',
         isCustomFolder: false,
       },
@@ -439,7 +467,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
       const sanitizedServices: ProjectService[] = services.map((s, idx) => ({
         id: s.id || `srv-${Date.now()}-${idx}`,
-        name: s.name?.trim() || `Service ${idx + 1}`,
+        name: s.name?.trim() || inferServiceNameFromFolder(s.folder || './', idx),
         folder: (s.folder || './').trim(),
         command: (s.command || 'npm run dev').trim(),
       }));
@@ -797,20 +825,14 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                       className="p-3.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-subtle)] space-y-3"
                     >
                       {/* Service Header Row */}
-                      <div className="flex items-center justify-between pb-2 border-b border-[var(--border-color)]">
+                      <div className="flex items-center justify-between pb-2.5 border-b border-[var(--border-color)]">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[10px] font-mono font-bold flex items-center justify-center text-[var(--text-primary)]">
                             {index + 1}
                           </span>
-                          <input
-                            type="text"
-                            placeholder={`Service ${index + 1} Name`}
-                            value={service.name}
-                            onChange={(e) =>
-                              handleUpdateService(index, { name: e.target.value })
-                            }
-                            className="bg-transparent border-none text-xs font-mono font-medium text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-0 p-0"
-                          />
+                          <span className="text-xs font-mono font-semibold text-[var(--text-primary)]">
+                            {service.name.trim() || `Service #${index + 1}`}
+                          </span>
                         </div>
 
                         {services.length > 1 && (
@@ -823,6 +845,34 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                             <Trash2 size={13} />
                           </button>
                         )}
+                      </div>
+
+                      {/* Explicit Service Name Input */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-mono uppercase text-[var(--text-secondary)]">
+                            Service Name *
+                          </label>
+                          <span className="text-[10px] font-mono text-[var(--text-tertiary)]">
+                            Identifies process (e.g. Frontend vs Backend)
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <Tag
+                            size={12}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none"
+                          />
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Frontend, Backend API, Webhook Worker, Docs"
+                            value={service.name}
+                            onChange={(e) =>
+                              handleUpdateService(index, { name: e.target.value })
+                            }
+                            className="monochrome-input w-full pl-8 pr-3 py-1.5 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                          />
+                        </div>
                       </div>
 
                       {/* 2 Required Input Fields: Folder Dropdown & Command Input */}
@@ -842,17 +892,29 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                           <CustomSelect
                             value={selectValue}
                             onChange={(val) => {
-                              if (val === '__custom__') {
-                                handleUpdateService(index, {
-                                  isCustomFolder: true,
-                                  folder: service.folder === './' ? './' : service.folder,
-                                });
-                              } else {
-                                handleUpdateService(index, {
-                                  folder: val,
-                                  isCustomFolder: false,
-                                });
+                              const chosenFolder =
+                                val === '__custom__'
+                                  ? service.folder === './'
+                                    ? './'
+                                    : service.folder
+                                  : val;
+                              const updates: Partial<ServiceFormItem> = {
+                                isCustomFolder: val === '__custom__',
+                                folder: chosenFolder,
+                              };
+                              if (
+                                !service.name.trim() ||
+                                service.name === 'Frontend' ||
+                                service.name === 'Backend API' ||
+                                service.name === 'Main Service' ||
+                                service.name.startsWith('Service ')
+                              ) {
+                                updates.name = inferServiceNameFromFolder(
+                                  chosenFolder,
+                                  index
+                                );
                               }
+                              handleUpdateService(index, updates);
                             }}
                             options={dynamicFolderOptions}
                             menuWidth="w-full sm:min-w-[280px]"

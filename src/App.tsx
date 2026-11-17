@@ -491,7 +491,7 @@ export function App() {
           : [
               {
                 id: `srv-${Date.now()}-1`,
-                name: 'Main Service',
+                name: 'Frontend',
                 folder: './',
                 command: projectData.devCommand || 'npm run dev',
               },

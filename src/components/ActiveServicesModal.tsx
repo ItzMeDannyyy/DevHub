@@ -280,7 +280,7 @@ export const ActiveServicesModal: React.FC<ActiveServicesModalProps> = ({
                           <div className="space-y-1.5 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-mono font-bold text-[var(--text-primary)]">
-                                {service.name || 'Main Service'}
+                                {service.name || 'Frontend'}
                               </span>
 
                               {/* PID and Port Badges */}

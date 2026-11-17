@@ -47,7 +47,7 @@ export const getProjectServices = (project: Project): ProjectService[] => {
   return [
     {
       id: 'srv-1',
-      name: 'Main Service',
+      name: 'Frontend',
       folder: './',
       command: project.devCommand || 'npm run dev',
       runningProcess: project.runningProcess,

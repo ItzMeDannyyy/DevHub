@@ -80,6 +80,8 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [customCmds, setCustomCmds] = useState<Record<string, string>>({});
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editingServiceName, setEditingServiceName] = useState('');
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isPathValid, setIsPathValid] = useState<boolean | null>(null);
@@ -408,10 +410,64 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
     });
   }, [project?.path, isOpen]);
 
-  // Reset custom commands when project changes
+  // Reset custom commands and inline editing when project changes
   useEffect(() => {
     setCustomCmds({});
+    setEditingServiceId(null);
+    setEditingServiceName('');
   }, [project?.id]);
+
+  const handleStartEditServiceName = (id: string, currentName: string) => {
+    setEditingServiceId(id);
+    setEditingServiceName(currentName);
+  };
+
+  const handleSaveServiceName = (serviceId: string) => {
+    if (!project) return;
+    const trimmed = editingServiceName.trim();
+    if (!trimmed) {
+      setEditingServiceId(null);
+      return;
+    }
+    const currentServices = getProjectServices(project);
+    const updatedServices = currentServices.map((s) =>
+      s.id === serviceId ? { ...s, name: trimmed } : s
+    );
+    const updatedProject: Project = {
+      ...project,
+      services: updatedServices,
+    };
+    if (onUpdateProject) {
+      onUpdateProject(updatedProject);
+    }
+    setEditingServiceId(null);
+  };
+
+  const handleCancelEditServiceName = () => {
+    setEditingServiceId(null);
+    setEditingServiceName('');
+  };
+
+  const handleSaveServiceCommand = (serviceId: string, newCmd: string) => {
+    if (!project) return;
+    const trimmed = newCmd.trim();
+    if (!trimmed) return;
+    const currentServices = getProjectServices(project);
+    const target = currentServices.find((s) => s.id === serviceId);
+    if (target && target.command === trimmed) return;
+
+    const updatedServices = currentServices.map((s) =>
+      s.id === serviceId ? { ...s, command: trimmed } : s
+    );
+    const updatedProject: Project = {
+      ...project,
+      services: updatedServices,
+      devCommand: updatedServices[0]?.command || project.devCommand,
+    };
+    if (onUpdateProject) {
+      onUpdateProject(updatedProject);
+    }
+  };
 
   // Escape key listener to close drawer
   useEffect(() => {
@@ -1051,10 +1107,83 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                     >
                       {/* Service Top Info */}
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border-color)]">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-xs font-mono font-semibold text-[var(--text-primary)] truncate">
-                            {service.name || `Service ${index + 1}`}
-                          </span>
+                        <div className="flex items-center gap-2 truncate flex-1 mr-2">
+                          {editingServiceId === service.id ? (
+                            <div className="flex items-center gap-1.5 flex-1 max-w-[280px]">
+                              <input
+                                type="text"
+                                value={editingServiceName}
+                                onChange={(e) => setEditingServiceName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveServiceName(service.id);
+                                  if (e.key === 'Escape') handleCancelEditServiceName();
+                                }}
+                                autoFocus
+                                placeholder="Service name (e.g. Frontend, Backend)"
+                                className="monochrome-input px-2 py-0.5 text-xs font-mono font-semibold rounded w-full"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveServiceName(service.id)}
+                                className="p-1 rounded text-emerald-500 hover:bg-emerald-500/10 cursor-pointer"
+                                title="Save service name"
+                              >
+                                <Check size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditServiceName}
+                                className="p-1 rounded text-[var(--text-tertiary)] hover:bg-[var(--bg-card)] cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 group/name truncate">
+                              <span
+                                onClick={() =>
+                                  handleStartEditServiceName(
+                                    service.id,
+                                    service.name ||
+                                      (service.folder === './'
+                                        ? index === 0
+                                          ? 'Frontend'
+                                          : 'Backend API'
+                                        : service.folder.replace(/^\.\//, ''))
+                                  )
+                                }
+                                className="text-xs font-mono font-semibold text-[var(--text-primary)] hover:text-sky-400 cursor-pointer transition-colors truncate"
+                                title="Click to rename service name (e.g. Frontend vs Backend)"
+                              >
+                                {service.name ||
+                                  (service.folder === './'
+                                    ? index === 0
+                                      ? 'Frontend'
+                                      : 'Backend API'
+                                    : service.folder.replace(/^\.\//, ''))}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleStartEditServiceName(
+                                    service.id,
+                                    service.name ||
+                                      (service.folder === './'
+                                        ? index === 0
+                                          ? 'Frontend'
+                                          : 'Backend API'
+                                        : service.folder.replace(/^\.\//, ''))
+                                  )
+                                }
+                                className="opacity-0 group-hover/name:opacity-100 p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all cursor-pointer"
+                                title="Rename service name"
+                              >
+                                <Edit3 size={11} />
+                              </button>
+                            </div>
+                          )}
+
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px] font-mono text-[var(--text-secondary)] shrink-0">
                             <Folder size={10} />
                             <span>{service.folder}</span>
@@ -1093,6 +1222,13 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                                 [service.id]: e.target.value,
                               }))
                             }
+                            onBlur={() => handleSaveServiceCommand(service.id, currentCmd)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSaveServiceCommand(service.id, currentCmd);
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
                             placeholder="e.g. npm run dev"
                             className="monochrome-input w-full pl-6 pr-2.5 py-1.5 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] disabled:opacity-75 disabled:cursor-not-allowed"
                           />
