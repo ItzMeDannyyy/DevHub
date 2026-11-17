@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X,
   Folder,
+  FolderOpen,
   FileText,
   Save,
   Terminal,
@@ -22,6 +23,7 @@ import { CategoryBadge, PriorityBadge } from './Badges';
 import {
   listSubdirectories,
   validateDirectoryPath,
+  selectFolderDialog,
 } from '../services/tauriBridge';
 
 interface AddProjectModalProps {
@@ -148,6 +150,37 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       setDetectedFolders([]);
     } else {
       setPathValidation({ status: 'checking' });
+    }
+  };
+
+  const [isBrowsing, setIsBrowsing] = useState(false);
+
+  // Native Folder Browser dialog
+  const handleBrowseFolder = async () => {
+    try {
+      setIsBrowsing(true);
+      const selectedPath = await selectFolderDialog(path);
+      if (selectedPath) {
+        const clean = selectedPath.replace(/^["']|["']$/g, '').trim();
+        setPath(clean);
+        setSubmitError(null);
+
+        // Auto-populate project name from folder name if currently empty
+        if (!name.trim()) {
+          const parts = clean.split(/[\\/]/).filter(Boolean);
+          const lastFolder = parts[parts.length - 1];
+          if (lastFolder) {
+            setName(lastFolder);
+          }
+        }
+
+        // Immediately trigger directory validation and subdirectory scanning
+        validateAndScan(clean);
+      }
+    } catch (err) {
+      console.warn('Folder selection failed:', err);
+    } finally {
+      setIsBrowsing(false);
     }
   };
 
@@ -480,7 +513,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowPathHelp(!showPathHelp)}
-                    title="How to get folder path"
+                    title="How to select repository folder"
                     className="monochrome-btn p-1 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer flex items-center"
                   >
                     <CircleHelp size={13} />
@@ -496,7 +529,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
                       <div className="flex items-start justify-between gap-2 mb-2 pb-1.5 border-b border-[var(--border-color)] relative z-10">
                         <span className="font-semibold text-xs text-[var(--text-primary)]">
-                          How to find the path
+                          Selecting your folder
                         </span>
                         <button
                           type="button"
@@ -510,15 +543,11 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                       <div className="space-y-1.5 text-[var(--text-secondary)] leading-relaxed relative z-10">
                         <div className="flex items-start gap-1.5">
                           <span className="text-[var(--text-primary)] font-bold">1.</span>
-                          <span>Open <strong>File Explorer</strong> and go to your project folder.</span>
+                          <span>Click <strong>Browse</strong> to choose your folder directly via File Explorer.</span>
                         </div>
                         <div className="flex items-start gap-1.5">
                           <span className="text-[var(--text-primary)] font-bold">2.</span>
-                          <span>Click the address bar at the top (or press <kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + L</kbd>).</span>
-                        </div>
-                        <div className="flex items-start gap-1.5">
-                          <span className="text-[var(--text-primary)] font-bold">3.</span>
-                          <span>Copy the path (<kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + C</kbd>) and paste it here.</span>
+                          <span>Or open <strong>File Explorer</strong>, press <kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + L</kbd> to copy the path, and paste it here.</span>
                         </div>
                       </div>
 
@@ -530,44 +559,59 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 </div>
               </div>
 
-              <div className="relative">
-                <Folder
-                  size={14}
-                  className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                    pathValidation.status === 'invalid'
-                      ? 'text-rose-500'
-                      : pathValidation.status === 'valid'
-                      ? 'text-emerald-500'
-                      : 'text-[var(--text-tertiary)]'
-                  }`}
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="C:\Users\...\Projects\api"
-                  value={path}
-                  onChange={(e) => handlePathChange(e.target.value)}
-                  className={`monochrome-input w-full pl-9 pr-9 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] transition-colors ${
-                    pathValidation.status === 'invalid'
-                      ? '!border-rose-500 focus:!border-rose-500 !ring-rose-500/20'
-                      : pathValidation.status === 'valid'
-                      ? '!border-emerald-500/50'
-                      : ''
-                  }`}
-                />
+              {/* Input + Native Browse Button Group */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Folder
+                    size={14}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
+                      pathValidation.status === 'invalid'
+                        ? 'text-rose-500'
+                        : pathValidation.status === 'valid'
+                        ? 'text-emerald-500'
+                        : 'text-[var(--text-tertiary)]'
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    required
+                    placeholder="C:\Users\...\Projects\api"
+                    value={path}
+                    onChange={(e) => handlePathChange(e.target.value)}
+                    className={`monochrome-input w-full pl-9 pr-9 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] transition-colors ${
+                      pathValidation.status === 'invalid'
+                        ? '!border-rose-500 focus:!border-rose-500 !ring-rose-500/20'
+                        : pathValidation.status === 'valid'
+                        ? '!border-emerald-500/50'
+                        : ''
+                    }`}
+                  />
 
-                {/* Status Indicator Icon in right edge of input */}
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                  {pathValidation.status === 'checking' && (
-                    <RefreshCw size={13} className="animate-spin text-[var(--text-secondary)]" />
-                  )}
-                  {pathValidation.status === 'valid' && (
-                    <CheckCircle2 size={14} className="text-emerald-500" />
-                  )}
-                  {pathValidation.status === 'invalid' && (
-                    <AlertCircle size={14} className="text-rose-500" />
-                  )}
+                  {/* Status Indicator Icon in right edge of input */}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                    {pathValidation.status === 'checking' && (
+                      <RefreshCw size={13} className="animate-spin text-[var(--text-secondary)]" />
+                    )}
+                    {pathValidation.status === 'valid' && (
+                      <CheckCircle2 size={14} className="text-emerald-500" />
+                    )}
+                    {pathValidation.status === 'invalid' && (
+                      <AlertCircle size={14} className="text-rose-500" />
+                    )}
+                  </div>
                 </div>
+
+                {/* Browse Button */}
+                <button
+                  type="button"
+                  onClick={handleBrowseFolder}
+                  disabled={isBrowsing}
+                  className="monochrome-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-card)] hover:border-[var(--border-hover)] text-xs font-mono font-medium text-[var(--text-primary)] transition-all cursor-pointer shrink-0 shadow-2xs disabled:opacity-50"
+                  title="Browse computer to select repository folder"
+                >
+                  <FolderOpen size={14} className="text-sky-500 shrink-0" />
+                  <span>{isBrowsing ? 'Browsing...' : 'Browse'}</span>
+                </button>
               </div>
 
               {/* Status Message / Error Fallback Alert */}

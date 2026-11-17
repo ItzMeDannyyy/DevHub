@@ -175,7 +175,11 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
         .to_string();
 
     Ok(GitRepoInfo {
-        branch: if branch.is_empty() { "main".into() } else { branch },
+        branch: if branch.is_empty() {
+            "main".into()
+        } else {
+            branch
+        },
         uncommitted_count,
         last_commit_message: if last_commit_message.is_empty() {
             "No commits yet".into()
@@ -297,7 +301,11 @@ fn check_process_running(pid: u32) -> bool {
         const STILL_ACTIVE: DWORD = 259;
 
         unsafe extern "system" {
-            fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+            fn OpenProcess(
+                dwDesiredAccess: DWORD,
+                bInheritHandle: BOOL,
+                dwProcessId: DWORD,
+            ) -> HANDLE;
             fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut DWORD) -> BOOL;
             fn CloseHandle(hObject: HANDLE) -> BOOL;
         }
@@ -316,9 +324,7 @@ fn check_process_running(pid: u32) -> bool {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let output = Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .output();
+        let output = Command::new("kill").args(["-0", &pid.to_string()]).output();
         output.map(|o| o.status.success()).unwrap_or(false)
     }
 }
@@ -387,7 +393,9 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: false,
             is_dir: false,
             canonical_path: None,
-            error_message: Some("Directory path cannot be empty. Please provide a path.".to_string()),
+            error_message: Some(
+                "Directory path cannot be empty. Please provide a path.".to_string(),
+            ),
             subdirectories_count: 0,
         });
     }
@@ -400,7 +408,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: false,
             is_dir: false,
             canonical_path: None,
-            error_message: Some(format!("Directory path does not exist on disk: \"{}\"", clean)),
+            error_message: Some(format!(
+                "Directory path does not exist on disk: \"{}\"",
+                clean
+            )),
             subdirectories_count: 0,
         });
     }
@@ -411,7 +422,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: true,
             is_dir: false,
             canonical_path: None,
-            error_message: Some(format!("The path points to a file, not a directory folder: \"{}\"", clean)),
+            error_message: Some(format!(
+                "The path points to a file, not a directory folder: \"{}\"",
+                clean
+            )),
             subdirectories_count: 0,
         });
     }
@@ -434,7 +448,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
                 exists: true,
                 is_dir: true,
                 canonical_path: None,
-                error_message: Some(format!("Directory exists but cannot be accessed (permission error): {}", e)),
+                error_message: Some(format!(
+                    "Directory exists but cannot be accessed (permission error): {}",
+                    e
+                )),
                 subdirectories_count: 0,
             });
         }
@@ -495,15 +512,22 @@ fn list_subdirectories(path: String) -> Result<Vec<String>, String> {
                         folders.push(format!("./{}", file_name));
 
                         // If it's a common monorepo grouping directory, inspect 1 level deeper
-                        if matches!(file_name.as_str(), "packages" | "apps" | "services" | "crates" | "modules") {
+                        if matches!(
+                            file_name.as_str(),
+                            "packages" | "apps" | "services" | "crates" | "modules"
+                        ) {
                             let sub_dir = entry.path();
                             if let Ok(sub_entries) = std::fs::read_dir(sub_dir) {
                                 for sub_entry in sub_entries.flatten() {
                                     if let Ok(sub_ft) = sub_entry.file_type() {
                                         if sub_ft.is_dir() {
-                                            let sub_name = sub_entry.file_name().to_string_lossy().to_string();
-                                            if !sub_name.starts_with('.') && !ignored_names.contains(&sub_name.as_str()) {
-                                                folders.push(format!("./{}/{}", file_name, sub_name));
+                                            let sub_name =
+                                                sub_entry.file_name().to_string_lossy().to_string();
+                                            if !sub_name.starts_with('.')
+                                                && !ignored_names.contains(&sub_name.as_str())
+                                            {
+                                                folders
+                                                    .push(format!("./{}/{}", file_name, sub_name));
                                             }
                                         }
                                     }
@@ -548,9 +572,20 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
     let mut children = None;
     if is_dir && current_depth < max_depth {
         let ignored_dirs = [
-            ".git", "node_modules", "target", "dist", "build",
-            ".next", ".nuxt", ".svelte-kit", "venv", ".venv",
-            "__pycache__", ".gemini", ".turbo", ".artifacts"
+            ".git",
+            "node_modules",
+            "target",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            ".svelte-kit",
+            "venv",
+            ".venv",
+            "__pycache__",
+            ".gemini",
+            ".turbo",
+            ".artifacts",
         ];
 
         if !ignored_dirs.contains(&name.as_str()) {
@@ -558,7 +593,8 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
                 let mut child_nodes = Vec::new();
                 for entry in entries.flatten() {
                     let child_path = entry.path();
-                    let child_name = child_path.file_name()
+                    let child_name = child_path
+                        .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
 
@@ -572,12 +608,10 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
                 }
 
                 // Sort directories first, then alphabetical
-                child_nodes.sort_by(|a, b| {
-                    match (a.is_dir, b.is_dir) {
-                        (true, false) => std::cmp::Ordering::Less,
-                        (false, true) => std::cmp::Ordering::Greater,
-                        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                    }
+                child_nodes.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 });
 
                 children = Some(child_nodes);
@@ -606,8 +640,8 @@ fn get_directory_tree(path: String, max_depth: Option<usize>) -> Result<TreeNode
     }
 
     let depth_limit = max_depth.unwrap_or(5);
-    let root_node = scan_tree(p, 0, depth_limit)
-        .ok_or_else(|| "Failed to scan root directory".to_string())?;
+    let root_node =
+        scan_tree(p, 0, depth_limit).ok_or_else(|| "Failed to scan root directory".to_string())?;
 
     Ok(root_node)
 }
@@ -625,8 +659,16 @@ fn to_base64(data: &[u8]) -> String {
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        let b1 = if chunk.len() > 1 {
+            chunk[1] as usize
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            chunk[2] as usize
+        } else {
+            0
+        };
 
         result.push(CHARSET[(b0 >> 2) & 0x3F] as char);
         result.push(CHARSET[((b0 << 4) | (b1 >> 4)) & 0x3F] as char);
@@ -660,17 +702,26 @@ fn read_file_content(path: String) -> Result<FileContentResult, String> {
     // Limit preview to files under 8 MB
     if size > 8 * 1024 * 1024 {
         return Ok(FileContentResult {
-            content: format!("File is too large to preview ({:.2} MB). Please open in external editor.", size as f64 / (1024.0 * 1024.0)),
+            content: format!(
+                "File is too large to preview ({:.2} MB). Please open in external editor.",
+                size as f64 / (1024.0 * 1024.0)
+            ),
             is_binary: false,
             size,
             line_count: 0,
         });
     }
 
-    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = p
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
 
     // Check for image formats
-    if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico") {
+    if matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico"
+    ) {
         if let Ok(bytes) = std::fs::read(p) {
             let mime = match ext.as_str() {
                 "png" => "image/png",
@@ -715,6 +766,7 @@ fn read_file_content(path: String) -> Result<FileContentResult, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_in_ide,

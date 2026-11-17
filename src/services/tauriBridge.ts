@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl as tauriOpenUrl } from '@tauri-apps/plugin-opener';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { FileTreeNode } from '../types';
 
 export const isTauriEnvironment = (): boolean => {
@@ -16,6 +17,35 @@ export const openExternalUrl = async (url: string): Promise<void> => {
     }
   }
   window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+/**
+ * Open a native OS folder picker dialog to select a repository directory.
+ * Returns the selected absolute path, or null if the user canceled.
+ */
+export const selectFolderDialog = async (defaultPath?: string): Promise<string | null> => {
+  if (isTauriEnvironment()) {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: 'Select Repository Folder',
+        defaultPath: defaultPath && defaultPath.trim() ? defaultPath.trim() : undefined,
+      });
+
+      if (typeof selected === 'string') {
+        return selected;
+      }
+      return null;
+    } catch (err) {
+      console.warn('Native folder selection dialog failed:', err);
+      return null;
+    }
+  }
+
+  // Browser-only fallback when testing outside Tauri desktop shell
+  const fallback = window.prompt('Enter repository folder path:', defaultPath || '');
+  return fallback && fallback.trim() ? fallback.trim() : null;
 };
 
 export interface FileContentData {
