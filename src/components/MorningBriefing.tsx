@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Project, getProjectServices } from '../types';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { VsCodeIcon } from './VsCodeIcon';
 
 interface MorningBriefingProps {
   projects: Project[];
@@ -232,6 +233,7 @@ export const MorningBriefing: React.FC<MorningBriefingProps> = ({
               onClick={() => onOpenIde(recentProject)}
               className="monochrome-btn inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
             >
+              <VsCodeIcon size={13} />
               <span>VS Code</span>
               <ArrowUpRight size={13} />
             </button>

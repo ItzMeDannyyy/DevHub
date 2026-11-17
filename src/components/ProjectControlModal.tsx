@@ -29,6 +29,7 @@ import { Project, getProjectServices } from '../types';
 import { formatDeadlineDisplay } from '../utils/date';
 import { CategoryBadge, PriorityBadge } from './Badges';
 import { GithubIcon } from './GithubIcon';
+import { VsCodeIcon } from './VsCodeIcon';
 import {
   validateDirectoryPath,
   listGitBranches,
@@ -771,7 +772,7 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                 onClick={() => onOpenIde(project)}
                 className="monochrome-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
               >
-                <ExternalLink size={14} />
+                <VsCodeIcon size={14} />
                 <span>Launch VS Code</span>
               </button>
 

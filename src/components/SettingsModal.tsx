@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { UserSettings, Project } from '../types';
 import { CustomSelect, SelectOption } from './CustomSelect';
+import { VsCodeIcon } from './VsCodeIcon';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ const ideOptions: SelectOption<UserSettings['preferredIde']>[] = [
     value: 'vscode',
     label: 'Visual Studio Code',
     chip: 'code',
-    icon: <Code2 size={14} />,
+    icon: <VsCodeIcon size={14} />,
     description: 'Standard VS Code binary command',
   },
   {
