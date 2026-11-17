@@ -131,7 +131,12 @@ export function App() {
         services: updatedSrvs,
         runningProcess: updatedRunningProcess,
       };
-      setSelectedProject(updatedProj);
+      setSelectedProject((current) => {
+        if (current && current.id === p.id) {
+          return updatedProj;
+        }
+        return current;
+      });
       const updatedList = projects.map((item) =>
         item.id === p.id ? updatedProj : item
       );
@@ -142,11 +147,14 @@ export function App() {
   const updateProjectsState = (updated: Project[]) => {
     setProjects(updated);
     saveProjects(updated);
-    // Keep selected project in sync if open
-    if (selectedProject) {
-      const match = updated.find((p) => p.id === selectedProject.id);
-      setSelectedProject(match || null);
-    }
+    // Keep selected project in sync ONLY if currently open
+    setSelectedProject((current) => {
+      if (current) {
+        const match = updated.find((p) => p.id === current.id);
+        return match || null;
+      }
+      return null;
+    });
   };
 
   const showToast = (msg: string) => {
@@ -467,7 +475,6 @@ export function App() {
           : item
       );
       updateProjectsState(updated);
-      showToast('Git status refreshed from disk');
     }
   };
 

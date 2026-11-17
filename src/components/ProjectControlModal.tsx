@@ -191,7 +191,7 @@ interface ProjectControlModalProps {
 }
 
 export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
-  project,
+  project: propProject,
   isOpen,
   onClose,
   onOpenIde,
@@ -209,6 +209,15 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
   onBranchSwitched,
   onUpdateProject,
 }) => {
+  const [cachedProject, setCachedProject] = useState<Project | null>(propProject);
+
+  useEffect(() => {
+    if (propProject) {
+      setCachedProject(propProject);
+    }
+  }, [propProject]);
+
+  const project = propProject || cachedProject;
   const [copied, setCopied] = useState(false);
   const [customCmds, setCustomCmds] = useState<Record<string, string>>({});
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
@@ -547,7 +556,7 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
         onRefreshGit(project);
       }
     });
-  }, [project?.path, isOpen]);
+  }, [project?.id, isOpen]);
 
   // Reset custom commands and inline editing when project changes
   useEffect(() => {
@@ -674,12 +683,40 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
       className={`fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out ${
         isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
     >
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div
+        className="fixed inset-y-0 right-0 max-w-full flex pl-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+      >
         {/* Slide-over Drawer Panel (Right to Left) */}
         <div
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className={`w-screen max-w-xl bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl flex flex-col transform transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isVisible ? 'translate-x-0' : 'translate-x-full'
           }`}
