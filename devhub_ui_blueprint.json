@@ -1,0 +1,321 @@
+{
+  "meta": {
+    "project_source": "DevHub — Developer Command Center",
+    "blueprint_file": "devhub_ui_blueprint.json",
+    "aesthetic_paradigm": "High-Contrast Minimalist Monochrome Developer Command Center (Anti-Slop)",
+    "tech_stack": {
+      "framework": "React 19.1.0 + TypeScript (~6.0.3) + Vite 8.0.16 (ES2022 Chromium / WebView2)",
+      "styling": "Tailwind CSS v4.3.5 (@tailwindcss/vite) + Native CSS Variables (--bg-canvas, --bg-card, etc.) + @theme font mapping",
+      "icons": "Lucide React (lucide-react ^1.71.0), size: 10px-28px (default 12-16px), default strokeWidth: 2.0 (2.2-2.8 for brand & action emphasis)",
+      "primitives": "Custom handcrafted accessible primitives (CustomSelect, CustomDateTimePicker, SlideOverDrawer, ScopeFilter, ProjectCard, Badges, ThemeToggle)"
+    }
+  },
+  "window_and_shell": {
+    "desktop_config": "Tauri v2 (`com.devhub.desktop`). Window dimensions: 1200x800px (initial), minWidth: 900px, minHeight: 600px, center: true, window decorations: native OS titlebar/frame enabled, transparent: false. WebView2 GPU rasterization enabled via Rust process flags (--enable-gpu-rasterization --enable-zero-copy --ignore-gpu-blocklist --disable-background-timer-throttling --disable-renderer-backgrounding).",
+    "layout_architecture": "Fixed viewport shell (min-h-screen flex flex-col font-sans) with a floating dynamic pill/island navigation header pinned to top (fixed top-4 left-1/2 -translate-x-1/2 z-50). Main view accommodates the floating header with pt-26 (104px) and max-w-6xl w-full mx-auto px-6 pb-12. Top horizontal navigation tab bar (MainNavigationBar) with active underline indicator switches between Repositories Grid, Developer Tools, and About. Slide-over drawers (fixed inset-y-0 right-0 max-w-full flex pl-10, w-screen max-w-xl) for Project Control and Add/Edit repository, and centered 2-column/1-column dialogs for Settings and Active Services.",
+    "dimensions": {
+      "titlebar_height": "Native OS titlebar (~32px on Windows); Floating navbar island height: 44px (collapsed) / 58px (expanded); Top content padding: pt-26 (104px / 6.5rem)",
+      "sidebar_width": "No permanent left sidebar in main viewport; SettingsModal left navigation sidebar: 240px (w-60); Slide-over control drawer: 576px (max-w-xl / w-screen max-w-xl)",
+      "statusbar_height": "None (No persistent bottom status bar; Transient fixed toast notification positioned at bottom-6 right-6)",
+      "max_content_width": "1152px (max-w-6xl) for main viewport content; 896px (max-w-4xl) for expanded navbar and SettingsModal; 1024px (max-w-5xl) for DocumentViewerModal; 768px (max-w-3xl) for ActiveServicesModal; 576px (max-w-xl) for slide-over drawer"
+    },
+    "scroll_strategy": "Document root body has default vertical scroll (bg-[var(--bg-canvas)] text-[var(--text-primary)]); main application views scroll within the viewport (main.flex-1); modals and slide-over drawers enforce overflow-hidden on backdrops with dedicated inner scroll containers (flex-1 overflow-y-auto) equipped with custom 6px webkit scrollbars (::-webkit-scrollbar width/height 6px, track var(--bg-canvas), thumb var(--border-color) rounded 3px). Horizontal tab bars and category filter bars enable smooth horizontal scroll (overflow-x-auto no-scrollbar)."
+  },
+  "tokens": {
+    "colors": {
+      "backgrounds": {
+        "primary": "Light: #f6f8fa (--bg-canvas) | Dark: #0d1117 (--bg-canvas)",
+        "surface": "Light: #ffffff (--bg-card) | Dark: #161b22 (--bg-card)",
+        "elevated": "Light: #eaeef2 (--bg-subtle) / #f3f4f6 (--bg-card-hover) | Dark: #21262d (--bg-subtle) / #1c2128 (--bg-card-hover)",
+        "overlay": "Light: rgba(0, 0, 0, 0.60) (drawer) / rgba(0, 0, 0, 0.75) (modals) | Dark: rgba(0, 0, 0, 0.60) (drawer) / rgba(0, 0, 0, 0.75) (modals) with backdrop-blur-xs"
+      },
+      "borders": {
+        "subtle": "Light: #eaeef2 (--bg-subtle) / #d0d7de | Dark: #21262d (--bg-subtle) / #30363d",
+        "default": "Light: #d0d7de (--border-color, --border-input) | Dark: #30363d (--border-color, --border-input)",
+        "focus": "Light: #0969da (--border-focus) / hover: #afb8c1 (--border-hover) | Dark: #58a6ff (--border-focus) / hover: #6e7681 (--border-hover); Focus ring: rgba(88, 166, 255, 0.35)"
+      },
+      "text": {
+        "primary": "Light: #1f2328 (--text-primary) | Dark: #c9d1d9 (--text-primary)",
+        "secondary": "Light: #57606a (--text-secondary) | Dark: #8b949e (--text-secondary)",
+        "muted": "Light: #6e7781 (--text-tertiary) | Dark: #6e7781 (--text-tertiary)",
+        "inverted": "Light: #ffffff (--accent-btn-text, --active-pill-text, --logo-text) | Dark: #0d1117 (--logo-text) / #f0f6fc (--active-pill-text) / #e6edf3 (--accent-btn-text)"
+      },
+      "accents_and_status": {
+        "primary_accent": "Light: #1f883d (--accent-btn-bg, hover: #1a7f37) | Dark: #238636 (--accent-btn-bg, hover: #2ea043); Active pill Light: #1f2328, Dark: #30363d; Text selection: Light #0969da, Dark rgba(56, 139, 253, 0.40)",
+        "success": "Emerald: Light border-emerald-500/40 bg-emerald-500/10 text-emerald-600, dot #10b981 (bg-emerald-500 animate-pulse); Dark dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300",
+        "warning": "Amber: Light border-amber-500/40 bg-amber-500/15 text-amber-600, dot #f59e0b (bg-amber-500); Dark dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-400 / dark:text-amber-300",
+        "danger": "Rose: Action buttons bg-rose-600 hover:bg-rose-500 text-white; Alert banners border-rose-500/30 bg-rose-500/10 text-rose-500; Critical badge Light bg-rose-100 text-rose-950 border-rose-400, Dark dark:bg-rose-500/25 dark:text-rose-300 dark:border-rose-500/40 with pulse ring-2 ring-rose-500/30"
+      }
+    },
+    "typography": {
+      "font_families": {
+        "sans": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        "mono": "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+      },
+      "scale": {
+        "xs": "12px (0.75rem), line-height: 16px (1rem)",
+        "sm": "14px (0.875rem), line-height: 20px (1.25rem)",
+        "base": "16px (1rem), line-height: 24px (1.5rem)",
+        "lg": "18px (1.125rem), line-height: 28px (1.75rem)",
+        "xl": "20px (1.25rem), line-height: 28px (1.75rem)"
+      },
+      "weights_and_tracking": "Weights: font-normal (400) for prose/body, font-medium (500) for interactive controls, font-semibold (600) for section headers and active tabs, font-bold (700) for titles and brand identity. Tracking: tracking-tight on sans headings (h1, h2, h3); tracking-wider with uppercase on mono section headers (text-xs font-mono uppercase tracking-wider) and badges."
+    },
+    "geometry": {
+      "border_radius": {
+        "sm": "6px (0.375rem / rounded-md) for inputs, compact buttons, status chips, kbd badges",
+        "md": "8px (0.5rem / rounded-lg) for action buttons, navigation items, select triggers, service cards",
+        "lg": "12px (0.75rem / rounded-xl) for project cards, containers, popovers, toolbars; 16px (1rem / rounded-2xl) for modal windows and hero card; 9999px (rounded-full) for floating navbar island, scope pills, and status dots"
+      },
+      "border_widths": "1px solid default (border / border-[var(--border-color)]), 2px bottom border for active main navigation tab (border-b-2), ring-1 / ring-2 for active focus states",
+      "spacing_unit": "4px base rhythm (0.5=2px, 1=4px, 1.5=6px, 2=8px, 2.5=10px, 3=12px, 3.5=14px, 4=16px, 5=20px, 6=24px, 7=28px, 8=32px, 26=104px)"
+    },
+    "effects": {
+      "shadows": "shadow-2xs, shadow-xs, shadow-sm, shadow-md, shadow-xl, shadow-2xl; Custom monochrome-card hover elevation: 0 8px 24px -8px rgba(0, 0, 0, 0.15) (light) / 0 8px 24px -8px rgba(1, 4, 9, 0.85) (dark); Input focus ring: 0 0 0 2px rgba(88, 166, 255, 0.35)",
+      "transitions": "Card: transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease; Button: all 120ms cubic-bezier(0.2, 0.8, 0.2, 1); Input: border-color 140ms ease, box-shadow 140ms ease; Drawer slide: transform 350ms ease-[cubic-bezier(0.16,1,0.3,1)]; Floating navbar: all 550ms ease-[cubic-bezier(0.16,1,0.3,1)]; Scope pill slider: all 300ms ease-[cubic-bezier(0.16,1,0.3,1)]; Modal dialogs: 200ms - 250ms ease-out"
+    }
+  },
+  "component_recipes": {
+    "NavbarIsland": {
+      "base_classes": "fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center pt-1 pb-3 px-4 transition-all; Inner nav: relative flex items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--bg-card)]/95 backdrop-blur-2xl shadow-2xl transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)]",
+      "interactive_states": {
+        "hover": "hover:border-[var(--border-hover)] hover:shadow-xl",
+        "focus": "isSearchFocused expands container to w-[94vw] max-w-4xl px-7 py-3.5 shadow-2xl",
+        "active_or_selected": "Expanded: w-[94vw] max-w-4xl px-7 py-3.5 shadow-2xl; Collapsed: w-72 px-4.5 py-2.5 cursor-pointer; Collapsed with draft: w-auto min-w-[340px] px-4.5 py-2.5",
+        "disabled": "pointer-events-none when hidden during transitions"
+      },
+      "structural_rules": "DOM: Fixed outer positioning container -> Nav pill -> Left brand group (Logo icon circle 32x32px + DevHub text + pulsing emerald dot) -> Center fluid search container (Search icon + input + Cmd+K kbd) -> Right actions group (ThemeToggle + Resume Draft button + Add Repo button + Settings button). When collapsed, search and right group hide via opacity-0 scale-x-0 w-0 and persistent compact icons appear."
+    },
+    "NavbarSearchInput": {
+      "base_classes": "monochrome-input w-full pl-9 pr-14 py-2 rounded-full text-xs font-mono placeholder-[var(--text-tertiary)] bg-[var(--bg-canvas)] border border-[var(--border-input,var(--border-color))] text-[var(--text-primary)] transition-all",
+      "interactive_states": {
+        "hover": "border-[var(--border-hover)]",
+        "focus": "outline-none border-[var(--border-focus)] shadow-[0_0_0_2px_rgba(88,166,255,0.35)]",
+        "active_or_selected": "border-[var(--border-focus)] ring-1 ring-[var(--border-focus)]",
+        "disabled": "opacity-60 cursor-not-allowed"
+      },
+      "structural_rules": "Positioned inside relative container. Left Lucide Search icon (size 14, left-3.5 top-1/2 -translate-y-1/2 pointer-events-none). Right Lucide Command shortcut kbd badge (size 9 command icon + 'K', right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px] font-mono)."
+    },
+    "MainNavigationTab": {
+      "base_classes": "group flex items-center gap-2 py-3 px-1.5 sm:px-2 border-b-2 text-xs sm:text-sm font-mono tracking-tight transition-all cursor-pointer whitespace-nowrap",
+      "interactive_states": {
+        "hover": "hover:text-[var(--text-primary)] hover:border-[var(--border-hover)]",
+        "focus": "outline-none",
+        "active_or_selected": "border-[var(--text-primary)] text-[var(--text-primary)] font-semibold",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Arranged inside a horizontal border-b border-[var(--border-color)] mb-8 container with negative bottom margin -mb-px to align active border-b-2 with the container divider. Left Lucide icon (size 15) -> Label text -> Optional pill badge (text-[10px] px-1.5 py-0.2 rounded-full font-mono; active: bg-[var(--active-pill-bg)] text-[var(--active-pill-text)], inactive: bg-[var(--bg-subtle)] text-[var(--text-tertiary)] border border-[var(--border-color)])."
+    },
+    "ScopeFilter": {
+      "base_classes": "relative inline-flex items-center p-1 rounded-full border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xs",
+      "interactive_states": {
+        "hover": "Button hover: text-[var(--text-primary)]",
+        "focus": "outline-none",
+        "active_or_selected": "Active button: text-[var(--active-pill-text)] font-semibold; Inactive button: text-[var(--text-secondary)]",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Contains an absolute animated highlight pill (absolute top-1 bottom-1 rounded-full bg-[var(--active-pill-bg)] border border-[var(--border-color)] shadow-xs transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none) whose inline left and width styles track the selected button's offsetLeft and offsetWidth. Child buttons: relative z-10 px-3 py-1 rounded-full text-xs font-mono inline-flex items-center gap-1.5 whitespace-nowrap with optional colored category dot (w-1.5 h-1.5 rounded-full)."
+    },
+    "ProjectCard": {
+      "base_classes": "monochrome-card group relative rounded-xl p-5 cursor-pointer flex flex-col justify-between bg-[var(--bg-card)] border border-[var(--border-color)] transition-[transform,border-color,background-color,box-shadow] duration-140 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+      "interactive_states": {
+        "hover": "hover:-translate-y-[1.5px] hover:border-[var(--border-hover)] hover:bg-[var(--bg-card-hover)] hover:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.15)] dark:hover:shadow-[0_8px_24px_-8px_rgba(1,4,9,0.85)]",
+        "focus": "outline-none ring-2 ring-[var(--border-focus)]",
+        "active_or_selected": "scale-[0.99] transition-transform",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Card layout: Top meta row (CategoryBadge + PriorityBadge + Active Services pill + Deadline date chip + Star favorite button) -> Title (text-base font-semibold tracking-tight text-[var(--text-primary)] group-hover:underline underline-offset-4) -> Filesystem path (mt-1 text-xs text-[var(--text-tertiary)] font-mono truncate) -> Bottom divider border-t border-[var(--border-color)] -> Footer (Git branch with GitBranch icon size 12 + modified count badge + 'Control' link with Lucide ArrowUpRight icon size 13)."
+    },
+    "ButtonPrimary": {
+      "base_classes": "monochrome-btn inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium shadow-xs cursor-pointer whitespace-nowrap transition-all duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+      "interactive_states": {
+        "hover": "hover:opacity-90 hover:brightness-105",
+        "focus": "outline-none ring-2 ring-[var(--border-focus)] ring-offset-2",
+        "active_or_selected": "active:scale-[0.98]",
+        "disabled": "opacity-50 cursor-not-allowed pointer-events-none"
+      },
+      "structural_rules": "Icon alignment: inline-flex items-center gap-1.5. Lucide icon (size 14, strokeWidth 2.4). Radius variant: rounded-full in navbar, rounded-md (px-3 py-1.5) in modals and forms."
+    },
+    "ButtonSecondary": {
+      "base_classes": "monochrome-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)] text-xs font-mono font-medium shadow-2xs cursor-pointer transition-all duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)]",
+      "interactive_states": {
+        "hover": "hover:text-[var(--text-primary)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-subtle)]",
+        "focus": "outline-none ring-1 ring-[var(--border-focus)]",
+        "active_or_selected": "active:scale-[0.98]",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Used for secondary modal triggers, copy buttons, and card actions. Standard Lucide icon size 13-14px."
+    },
+    "ButtonGhost": {
+      "base_classes": "p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer inline-flex items-center justify-center",
+      "interactive_states": {
+        "hover": "text-[var(--text-primary)] bg-[var(--bg-subtle)]",
+        "focus": "outline-none ring-1 ring-[var(--border-color)]",
+        "active_or_selected": "active:scale-95",
+        "disabled": "opacity-40 cursor-not-allowed"
+      },
+      "structural_rules": "Used for header icons (Settings, Theme, Close X, refresh). Lucide icon size 14-16px."
+    },
+    "ButtonDanger": {
+      "base_classes": "monochrome-btn inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-rose-600 text-white text-xs font-mono font-medium shadow-xs cursor-pointer transition-colors duration-120",
+      "interactive_states": {
+        "hover": "hover:bg-rose-500",
+        "focus": "outline-none ring-2 ring-rose-500/50",
+        "active_or_selected": "active:scale-[0.98]",
+        "disabled": "opacity-50 cursor-not-allowed pointer-events-none"
+      },
+      "structural_rules": "Used exclusively for destructive or terminal actions: Stop All, Kill PID, and Delete Repository. Lucide Square icon (size 11, fill='currentColor') or Trash2 icon (size 12)."
+    },
+    "SplitButtonIDE": {
+      "base_classes": "flex items-stretch rounded-md shadow-xs bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] overflow-hidden",
+      "interactive_states": {
+        "hover": "Primary button: hover:opacity-90; Dropdown trigger: hover:bg-black/10",
+        "focus": "outline-none",
+        "active_or_selected": "Dropdown open: chevron trigger bg-black/15, chevron rotate-180",
+        "disabled": "opacity-60 cursor-not-allowed"
+      },
+      "structural_rules": "Composite component: Left primary launch button (flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium cursor-pointer truncate) + Right chevron toggle button (px-2.5 py-2.5 border-l border-white/20 transition-colors cursor-pointer flex items-center justify-center). Accompanied by absolute top-full dropdown menu (rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xl z-50 text-xs font-mono backdrop-blur-md max-h-64 overflow-y-auto)."
+    },
+    "SplitButtonTerminal": {
+      "base_classes": "flex items-stretch rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] text-[var(--text-primary)] shadow-xs overflow-hidden transition-colors",
+      "interactive_states": {
+        "hover": "hover:border-[var(--border-hover)]; Dropdown trigger: hover:bg-[var(--bg-canvas)]",
+        "focus": "outline-none",
+        "active_or_selected": "Dropdown open: trigger bg-[var(--bg-canvas)], chevron rotate-180",
+        "disabled": "opacity-60 cursor-not-allowed"
+      },
+      "structural_rules": "Composite component matching SplitButtonIDE geometry: Left terminal launcher (flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium cursor-pointer truncate) + Right chevron toggle button (px-2.5 py-2.5 border-l border-[var(--border-color)] transition-colors cursor-pointer flex items-center justify-center)."
+    },
+    "Input": {
+      "base_classes": "monochrome-input w-full px-3.5 py-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-input,var(--border-color))] text-[var(--text-primary)] text-xs font-mono placeholder-[var(--text-tertiary)] transition-[border-color,box-shadow] duration-140 ease-out",
+      "interactive_states": {
+        "hover": "border-[var(--border-hover)]",
+        "focus": "outline-none border-[var(--border-focus)] shadow-[0_0_0_2px_rgba(88,166,255,0.35)]",
+        "active_or_selected": "border-[var(--border-focus)]",
+        "disabled": "opacity-60 cursor-not-allowed bg-[var(--bg-subtle)]"
+      },
+      "structural_rules": "Always accompanied by uppercase label: block text-[11px] font-mono uppercase text-[var(--text-secondary)] mb-1.5. In service command rows, preceded by an absolute left-2.5 monospace '$' character with pl-6 padding."
+    },
+    "CustomSelect": {
+      "base_classes": "relative select-none text-xs; Trigger button: w-full group flex items-center justify-between px-3.5 py-2 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-input,var(--border-color))] text-[var(--text-primary)] font-mono transition-all cursor-pointer",
+      "interactive_states": {
+        "hover": "hover:border-[var(--border-hover)] hover:bg-[var(--bg-card)]",
+        "focus": "focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)]",
+        "active_or_selected": "Open state: border-[var(--border-focus)] ring-1 ring-[var(--border-focus)] shadow-xs bg-[var(--bg-card)]; Selected item: bg-[var(--bg-subtle)] text-[var(--text-primary)] font-medium border border-[var(--border-color)]",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Trigger contains option icon/badge, label text, optional command chip, and rotating Lucide ChevronDown icon (size 14). Popover dropdown: absolute z-50 mt-1.5 p-1 rounded-xl bg-[var(--bg-card)] border border-[var(--border-hover)] shadow-2xl max-h-68 overflow-y-auto min-w-[260px]. Selected option displays a round checkmark badge (w-5 h-5 rounded-full bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)])."
+    },
+    "CustomDateTimePicker": {
+      "base_classes": "relative select-none text-xs font-mono; Trigger: w-full flex items-center justify-between px-3.5 py-2 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-input,var(--border-color))] text-[var(--text-primary)] font-mono transition-all cursor-pointer",
+      "interactive_states": {
+        "hover": "hover:border-[var(--border-hover)] hover:bg-[var(--bg-card)]",
+        "focus": "focus:outline-none focus:border-[var(--border-focus)] focus:ring-1 focus:ring-[var(--border-focus)]",
+        "active_or_selected": "Open state: border-[var(--border-focus)] ring-1 ring-[var(--border-focus)] shadow-xs; Selected calendar cell: bg-[var(--active-pill-bg)] text-[var(--active-pill-text)] font-bold rounded-lg",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "Trigger contains Lucide Calendar icon (size 14) + formatted date display + clear button + chevron. Popover: absolute z-50 mt-1.5 p-3 rounded-2xl bg-[var(--bg-card)] border border-[var(--border-hover)] shadow-2xl w-72. Contains month navigation header (ChevronLeft/Right) + 7-column weekday grid + 24h hour and minute slider controls + Preset quick-select buttons ('Today 18:00', 'Tomorrow 18:00', 'Next Week')."
+    },
+    "CategoryBadge": {
+      "base_classes": "inline-flex items-center rounded-md border font-mono uppercase tracking-wider font-medium shadow-2xs truncate",
+      "interactive_states": {
+        "hover": "brightness-105",
+        "focus": "none",
+        "active_or_selected": "none",
+        "disabled": "none"
+      },
+      "structural_rules": "Geometry: sm: px-1.5 py-0.5 text-[10px] gap-1; md: px-2 py-0.5 text-xs gap-1.5; lg: px-2.5 py-1 text-xs gap-2. Components: Colored circular dot (w-1.5 h-1.5 rounded-full) + Lucide category icon (size 10-14px) + Uppercase label. Variants: Work (sky), Client (purple), Personal (emerald), School (amber), Open Source (teal)."
+    },
+    "PriorityBadge": {
+      "base_classes": "inline-flex items-center rounded-md border font-mono uppercase tracking-wider font-medium shadow-2xs truncate",
+      "interactive_states": {
+        "hover": "brightness-105",
+        "focus": "none",
+        "active_or_selected": "none",
+        "disabled": "none"
+      },
+      "structural_rules": "Geometry identical to CategoryBadge. Critical includes pulsing dot (w-1.5 h-1.5 rounded-full bg-rose-600 dark:bg-rose-500 animate-pulse ring-2 ring-rose-500/30). Icons: Critical (AlertOctagon), High (AlertTriangle), Medium (Clock), Low (Minus). Variants: Critical (rose), High (orange), Medium (indigo), Low (zinc)."
+    },
+    "SlideOverDrawer": {
+      "base_classes": "Backdrop: fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out; Outer container: fixed inset-y-0 right-0 max-w-full flex pl-10; Drawer shell: w-screen max-w-xl bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl flex flex-col transform transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)]",
+      "interactive_states": {
+        "hover": "none",
+        "focus": "outline-none",
+        "active_or_selected": "Open: translate-x-0 opacity-100 pointer-events-auto; Closed: translate-x-full opacity-0 pointer-events-none",
+        "disabled": "none"
+      },
+      "structural_rules": "3-tier vertical flex column: Fixed header (flex items-start justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)]) -> Scrollable body (p-6 space-y-6 flex-1 overflow-y-auto) -> Fixed footer (flex items-center justify-between px-6 py-3.5 border-t border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0). Backdrop click-through guarded with explicit onMouseDown and onClick target comparison."
+    },
+    "ModalDialog": {
+      "base_classes": "Backdrop: fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-xs transition-opacity duration-200 ease-out; Dialog shell: w-[92vw] max-w-4xl h-[84vh] min-h-[520px] rounded-2xl border border-[var(--border-color)] bg-[var(--bg-card)] shadow-2xl flex flex-col overflow-hidden transform transition-all duration-250 ease-out",
+      "interactive_states": {
+        "hover": "none",
+        "focus": "outline-none",
+        "active_or_selected": "Open: scale-100 opacity-100 pointer-events-auto; Closed: scale-95 opacity-0 pointer-events-none",
+        "disabled": "none"
+      },
+      "structural_rules": "Centered overlay dialog. In SettingsModal: 2-column layout with 240px left sidebar (w-60 border-r border-[var(--border-color)] bg-[var(--bg-subtle)]/40 p-4 space-y-1.5 shrink-0 overflow-y-auto) and scrollable right pane (flex-1 p-8 overflow-y-auto space-y-8). Header and footer separated by 1px solid borders."
+    },
+    "WorkingTreeToolbar": {
+      "base_classes": "p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-card)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs",
+      "interactive_states": {
+        "hover": "Buttons: hover:text-[var(--text-primary)] hover:border-[var(--border-hover)]",
+        "focus": "Search input: focus:border-[var(--border-focus)]",
+        "active_or_selected": "Segmented tab active: bg-[var(--bg-card)] text-[var(--text-primary)] font-medium shadow-2xs border border-[var(--border-color)]",
+        "disabled": "disabled:opacity-40"
+      },
+      "structural_rules": "Left Search / Filter input with Lucide Search icon (size 13) and clear X button -> Right controls group: Segmented view mode toggle (Diagram Tree vs Outline) inside p-0.5 rounded-lg bg-[var(--bg-subtle)] container + Expand/Collapse all buttons + Zoom level percentage controls (60% to 140%)."
+    },
+    "ToastNotification": {
+      "base_classes": "fixed bottom-6 right-6 z-50 flex items-center gap-2 px-3.5 py-2.5 rounded-md bg-[var(--bg-card)] border border-[var(--border-hover)] text-[var(--text-primary)] text-xs font-mono shadow-2xl animate-fade-in",
+      "interactive_states": {
+        "hover": "none",
+        "focus": "none",
+        "active_or_selected": "none",
+        "disabled": "none"
+      },
+      "structural_rules": "Transient status notification (auto-dismisses after 3000ms). Contains Lucide CheckCircle2 icon (size 13, text-emerald-500 shrink-0) followed by confirmation message text."
+    },
+    "ThemeToggle": {
+      "base_classes": "inline-flex items-center rounded-lg border border-[var(--border-color)] bg-[var(--bg-canvas)] p-1 gap-0.5 shadow-2xs",
+      "interactive_states": {
+        "hover": "hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]",
+        "focus": "outline-none",
+        "active_or_selected": "Active button: bg-white text-zinc-900 border border-zinc-200/90 shadow-xs font-semibold dark:bg-[#30363d] dark:text-[#f0f6fc] dark:border-[#6e7681]/50 dark:shadow-sm; Inactive button: text-[var(--text-secondary)] border-transparent",
+        "disabled": "opacity-50 cursor-not-allowed"
+      },
+      "structural_rules": "3-button segmented control: Light (Sun icon size 13, amber-500 when active) -> Dark (Moon icon size 13, indigo-400 when active) -> System (Monitor icon size 13, sky-400 when active). Compact labels hidden on small mobile viewports (hidden sm:inline)."
+    }
+  },
+  "interaction_and_ux_laws": {
+    "keybindings": {
+      "Ctrl+K / Cmd+K": "Global navigation & search trigger. Navigates to home tab if needed, opens and expands the floating header island, and focuses the main search input.",
+      "Escape": "Global dismiss action. Dismisses search, collapses floating header to pill, closes any open slide-over drawer, popover menu, or modal dialog.",
+      "Enter": "Form submission and selection trigger. Confirms modal selections, commits inline service names or commands, checks out typed Git branch, or selects highlighted combobox item.",
+      "ArrowDown / ArrowUp": "Vertical keyboard navigation. Cycles through options in CustomSelect, CustomDateTimePicker, and Git branch combobox menus.",
+      "Space": "Combobox toggle. Opens and closes CustomSelect dropdown when trigger button is focused."
+    },
+    "strict_dos": [
+      "Strict Lucide icons only: Never use Unicode emojis in UI markup, buttons, labels, badges, or notifications; exclusively use clean SVG vector icons from lucide-react.",
+      "Use CSS custom variables (--bg-canvas, --bg-card, --border-color, --text-primary, etc.) for all color styling to ensure instant, deterministic light/dark/system theme transitions.",
+      "Strictly enforce monospaced typography (font-mono / JetBrains Mono) for all paths, commands, code blocks, statistics, timestamps, badges, and developer technical metadata.",
+      "Apply subtle, restrained micro-interactions: scale buttons to 0.98 on active click (:active), lift interactive cards by -1.5px on hover, and smoothly rotate dropdown chevrons 180 degrees.",
+      "Utilize dual-action split buttons for external launcher controls: direct click launches default tool, right chevron toggle reveals alternative editor or shell choices.",
+      "Auto-save in-progress form drafts to localStorage upon drawer closure and present an alert badge in the top navigation island to resume anytime.",
+      "Perform real-time filesystem pre-flight verification on path entry with clear visual feedback before enabling project creation.",
+      "Standardize custom 6px webkit scrollbars across all scrollable containers (::-webkit-scrollbar width/height 6px, track var(--bg-canvas), thumb var(--border-color) rounded 3px).",
+      "Retain 104px (pt-26) top spacing on main viewports to prevent layout overlap with the floating island header.",
+      "Employ 350ms cubic-bezier(0.16, 1, 0.3, 1) transition timing for slide-over drawer panels to ensure smooth hardware-accelerated movement."
+    ],
+    "strict_donts": [
+      "No Unicode emojis in UI (e.g., 🚀, 📁, 💻, ⚙️, ❌, ✅, 🔥); exclusively use Lucide vector icons.",
+      "No multi-color rainbow gradients, vibrant gradients, or noisy glassmorphism effects.",
+      "No rounded-full project cards (cards strictly use rounded-xl or rounded-2xl; rounded-full is reserved solely for badges, pills, and the floating island header).",
+      "No heavy default browser drop shadows (shadows must be restrained shadow-2xs / shadow-xs or dark-tinted deep soft elevation shadow-2xl for overlay dialogs).",
+      "No abrupt unmounting of slide-over drawers; drawers must animate smoothly on exit using cached visibility state.",
+      "No event propagation leaks on modal backdrop clicks that inadvertently trigger underlying project cards.",
+      "No unstyled native HTML <select> or native <input type='date'> elements; always use custom accessible primitives.",
+      "No silent process or terminal command failures; always inform the user via toast notification or visible error card."
+    ]
+  }
+}
