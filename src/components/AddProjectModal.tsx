@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   X,
   Folder,
+  FolderOpen,
   FileText,
   Save,
   Terminal,
@@ -14,14 +15,32 @@ import {
   CheckCircle2,
   AlertTriangle,
   AlertCircle,
+  Tag,
 } from 'lucide-react';
-import { Project, ProjectCategory, Priority, ProjectService, getProjectServices } from '../types';
+import {
+  Project,
+  ProjectCategory,
+  Priority,
+  ProjectService,
+  getProjectServices,
+  AddRepoDraft,
+} from '../types';
+import {
+  saveRepoDraft,
+  loadRepoDraft,
+  clearRepoDraft,
+  isDraftMeaningful,
+} from '../services/storage';
 import { CustomSelect, SelectOption } from './CustomSelect';
 import { CustomDateTimePicker } from './CustomDateTimePicker';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { GithubIcon } from './GithubIcon';
 import {
   listSubdirectories,
   validateDirectoryPath,
+  selectFolderDialog,
+  getGitRemoteUrl,
+  formatRepoWebUrl,
 } from '../services/tauriBridge';
 
 interface AddProjectModalProps {
@@ -29,6 +48,8 @@ interface AddProjectModalProps {
   onClose: () => void;
   onSave: (projectData: Partial<Project>) => void;
   initialProject?: Project | null;
+  onDraftChange?: (hasDraft: boolean) => void;
+  onDraftSavedNotify?: () => void;
 }
 
 interface ServiceFormItem {
@@ -38,6 +59,27 @@ interface ServiceFormItem {
   command: string;
   isCustomFolder?: boolean;
 }
+
+export const inferServiceNameFromFolder = (folder: string, index: number = 0): string => {
+  if (!folder || folder === './' || folder === '.') {
+    return index === 0 ? 'Frontend' : 'Backend API';
+  }
+  const clean = folder.replace(/^\.\//, '').replace(/\/$/, '').trim();
+  if (!clean) return index === 0 ? 'Frontend' : 'Backend API';
+
+  const lower = clean.toLowerCase();
+  if (lower === 'src-tauri' || lower === 'tauri') return 'Desktop Core';
+  if (lower === 'backend' || lower === 'server' || lower === 'api') return 'Backend API';
+  if (lower === 'frontend' || lower === 'client' || lower === 'web' || lower === 'ui') return 'Frontend';
+  if (lower === 'docs' || lower === 'documentation') return 'Documentation';
+  if (lower === 'worker' || lower === 'jobs' || lower === 'queue') return 'Worker';
+
+  return clean
+    .split(/[-_/]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
 const categoryOptions: SelectOption<Exclude<ProjectCategory, 'all'>>[] = [
   {
@@ -104,9 +146,12 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   onClose,
   onSave,
   initialProject,
+  onDraftChange,
+  onDraftSavedNotify,
 }) => {
   const [name, setName] = useState('');
   const [path, setPath] = useState('');
+  const [githubUrl, setGithubUrl] = useState('');
   const [category, setCategory] = useState<Exclude<ProjectCategory, 'all'>>('work');
   const [priority, setPriority] = useState<Priority>('medium');
   const [deadline, setDeadline] = useState('');
@@ -117,11 +162,15 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   const [services, setServices] = useState<ServiceFormItem[]>([
     {
       id: 'srv-1',
-      name: 'Main Service',
+      name: 'Frontend',
       folder: './',
       command: 'npm run dev',
     },
   ]);
+
+  // Draft restoration state & initialization guard
+  const [isRestoredDraft, setIsRestoredDraft] = useState(false);
+  const isInitializedRef = useRef(false);
 
   // Path validity verification state & submission state
   const [pathValidation, setPathValidation] = useState<{
@@ -151,6 +200,37 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
     }
   };
 
+  const [isBrowsing, setIsBrowsing] = useState(false);
+
+  // Native Folder Browser dialog
+  const handleBrowseFolder = async () => {
+    try {
+      setIsBrowsing(true);
+      const selectedPath = await selectFolderDialog(path);
+      if (selectedPath) {
+        const clean = selectedPath.replace(/^["']|["']$/g, '').trim();
+        setPath(clean);
+        setSubmitError(null);
+
+        // Auto-populate project name from folder name if currently empty
+        if (!name.trim()) {
+          const parts = clean.split(/[\\/]/).filter(Boolean);
+          const lastFolder = parts[parts.length - 1];
+          if (lastFolder) {
+            setName(lastFolder);
+          }
+        }
+
+        // Immediately trigger directory validation and subdirectory scanning
+        validateAndScan(clean);
+      }
+    } catch (err) {
+      console.warn('Folder selection failed:', err);
+    } finally {
+      setIsBrowsing(false);
+    }
+  };
+
   // Validate directory path on disk and scan subdirectories
   const validateAndScan = useCallback(async (targetPath: string) => {
     const clean = targetPath.trim().replace(/^["']|["']$/g, '').trim();
@@ -176,6 +256,13 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           status: 'valid',
           canonicalPath: res.canonicalPath,
           folderCount: res.subdirectoriesCount,
+        });
+
+        // Automatically detect Git remote URL if user hasn't typed one
+        getGitRemoteUrl(clean).then((remote) => {
+          if (remote) {
+            setGithubUrl((prev) => (prev ? prev : remote));
+          }
         });
 
         const dirs = await listSubdirectories(clean);
@@ -270,69 +357,216 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) {
+      isInitializedRef.current = false;
+      return;
+    }
+
     if (initialProject) {
       setName(initialProject.name);
       setPath(initialProject.path);
+      setGithubUrl(initialProject.githubUrl || initialProject.gitStatus?.remoteUrl || '');
       setCategory(initialProject.category);
       setPriority(initialProject.priority);
       setDeadline(initialProject.deadline || '');
       setNotes(initialProject.notes || '');
       setSubmitError(null);
+      setIsRestoredDraft(false);
       validateAndScan(initialProject.path);
 
       const initialServices = getProjectServices(initialProject);
       setServices(
         initialServices.map((s, idx) => ({
           id: s.id || `srv-${idx + 1}`,
-          name: s.name || `Service ${idx + 1}`,
+          name: s.name || inferServiceNameFromFolder(s.folder || './', idx),
           folder: s.folder || './',
           command: s.command || 'npm run dev',
           isCustomFolder: false,
         }))
       );
+      isInitializedRef.current = true;
     } else {
-      setName('');
-      setPath('');
-      setCategory('work');
-      setPriority('medium');
-      setDeadline('');
-      setNotes('');
-      setSubmitError(null);
-      setPathValidation({ status: 'idle' });
-      setDetectedFolders([]);
-      setServices([
-        {
-          id: 'srv-1',
-          name: 'Main Service',
-          folder: './',
-          command: 'npm run dev',
-          isCustomFolder: false,
-        },
-      ]);
+      // Check if a saved draft exists
+      const draft = loadRepoDraft();
+      if (draft && isDraftMeaningful(draft)) {
+        setName(draft.name || '');
+        setPath(draft.path || '');
+        setGithubUrl(draft.githubUrl || '');
+        setCategory(draft.category || 'work');
+        setPriority(draft.priority || 'medium');
+        setDeadline(draft.deadline || '');
+        setNotes(draft.notes || '');
+        setSubmitError(null);
+        setIsRestoredDraft(true);
+        if (draft.services && draft.services.length > 0) {
+          setServices(draft.services);
+        } else {
+          setServices([
+            {
+              id: 'srv-1',
+              name: 'Frontend',
+              folder: './',
+              command: 'npm run dev',
+              isCustomFolder: false,
+            },
+          ]);
+        }
+        if (draft.path) {
+          validateAndScan(draft.path);
+        }
+      } else {
+        setName('');
+        setPath('');
+        setGithubUrl('');
+        setCategory('work');
+        setPriority('medium');
+        setDeadline('');
+        setNotes('');
+        setSubmitError(null);
+        setPathValidation({ status: 'idle' });
+        setDetectedFolders([]);
+        setIsRestoredDraft(false);
+        setServices([
+          {
+            id: 'srv-1',
+            name: 'Frontend',
+            folder: './',
+            command: 'npm run dev',
+            isCustomFolder: false,
+          },
+        ]);
+      }
+      isInitializedRef.current = true;
     }
   }, [initialProject, isOpen, validateAndScan]);
+
+  // Auto-save form inputs to localStorage draft on change
+  useEffect(() => {
+    if (!isOpen || initialProject || !isInitializedRef.current) return;
+
+    const currentDraft: AddRepoDraft = {
+      name,
+      path,
+      githubUrl,
+      category,
+      priority,
+      deadline,
+      notes,
+      services,
+      savedAt: new Date().toISOString(),
+    };
+
+    if (isDraftMeaningful(currentDraft)) {
+      saveRepoDraft(currentDraft);
+      onDraftChange?.(true);
+    } else {
+      clearRepoDraft();
+      onDraftChange?.(false);
+      setIsRestoredDraft(false);
+    }
+  }, [
+    name,
+    path,
+    githubUrl,
+    category,
+    priority,
+    deadline,
+    notes,
+    services,
+    isOpen,
+    initialProject,
+    onDraftChange,
+  ]);
+
+  // Explicitly discard saved draft and clear form
+  const handleDiscardDraft = () => {
+    clearRepoDraft();
+    onDraftChange?.(false);
+    setName('');
+    setPath('');
+    setGithubUrl('');
+    setCategory('work');
+    setPriority('medium');
+    setDeadline('');
+    setNotes('');
+    setSubmitError(null);
+    setPathValidation({ status: 'idle' });
+    setDetectedFolders([]);
+    setIsRestoredDraft(false);
+    setServices([
+      {
+        id: 'srv-1',
+        name: 'Frontend',
+        folder: './',
+        command: 'npm run dev',
+        isCustomFolder: false,
+      },
+    ]);
+  };
+
+  // Safe close handler that guarantees draft persistence when adding a repo
+  const handleClose = useCallback(() => {
+    if (!initialProject && isInitializedRef.current) {
+      const currentDraft: AddRepoDraft = {
+        name,
+        path,
+        githubUrl,
+        category,
+        priority,
+        deadline,
+        notes,
+        services,
+        savedAt: new Date().toISOString(),
+      };
+      if (isDraftMeaningful(currentDraft)) {
+        saveRepoDraft(currentDraft);
+        onDraftChange?.(true);
+        onDraftSavedNotify?.();
+      }
+    }
+    onClose();
+  }, [
+    initialProject,
+    name,
+    path,
+    githubUrl,
+    category,
+    priority,
+    deadline,
+    notes,
+    services,
+    onDraftChange,
+    onDraftSavedNotify,
+    onClose,
+  ]);
 
   // Escape key listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   if (!isRendered) return null;
 
   const handleAddService = () => {
     const newId = `srv-${Date.now()}-${services.length + 1}`;
+    const unusedFolder =
+      detectedFolders.find(
+        (f) => f !== './' && !services.some((s) => s.folder === f)
+      ) || './';
+    const suggestedName = inferServiceNameFromFolder(unusedFolder, services.length);
+
     setServices([
       ...services,
       {
         id: newId,
-        name: `Service ${services.length + 1}`,
-        folder: './',
+        name: suggestedName,
+        folder: unusedFolder,
         command: 'npm run dev',
         isCustomFolder: false,
       },
@@ -393,10 +627,16 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
       const sanitizedServices: ProjectService[] = services.map((s, idx) => ({
         id: s.id || `srv-${Date.now()}-${idx}`,
-        name: s.name?.trim() || `Service ${idx + 1}`,
+        name: s.name?.trim() || inferServiceNameFromFolder(s.folder || './', idx),
         folder: (s.folder || './').trim(),
         command: (s.command || 'npm run dev').trim(),
       }));
+
+      if (!initialProject) {
+        clearRepoDraft();
+        onDraftChange?.(false);
+        setIsRestoredDraft(false);
+      }
 
       onSave({
         ...(initialProject ? { id: initialProject.id } : {}),
@@ -405,6 +645,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
         category,
         priority,
         deadline: deadline || undefined,
+        githubUrl: githubUrl.trim() ? formatRepoWebUrl(githubUrl.trim()) : undefined,
         services: sanitizedServices,
         devCommand: sanitizedServices[0]?.command || 'npm run dev',
         notes: notes.trim() || undefined,
@@ -423,7 +664,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
       className={`fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out ${
         isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
         {/* Slide-over Drawer Panel (Right to Left) */}
@@ -436,7 +677,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0">
             <div>
-              <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
+              <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-sans">
                 {initialProject ? 'Edit Repository' : 'Add Repository'}
               </h2>
               <p className="text-xs font-mono text-[var(--text-tertiary)] mt-0.5">
@@ -446,7 +687,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
             >
               <X size={18} />
@@ -455,6 +696,31 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
           {/* Form Content */}
           <form onSubmit={handleSubmit} className="p-6 pb-28 space-y-5 flex-1 overflow-y-auto">
+            {/* Restored Draft Banner */}
+            {isRestoredDraft && !initialProject && (
+              <div className="p-3.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-xs font-mono flex items-center justify-between gap-3 animate-fade-in shadow-2xs">
+                <div className="flex items-center gap-2.5 text-amber-500 dark:text-amber-400 min-w-0">
+                  <AlertTriangle size={16} className="shrink-0 text-amber-500" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-amber-600 dark:text-amber-300 uppercase tracking-wide text-[11px] block">
+                      Unsaved Draft Restored
+                    </span>
+                    <span className="text-[11px] text-[var(--text-secondary)] truncate block">
+                      Recovered your previously entered repository data and configured services.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-amber-500/30 hover:border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-300 text-xs font-mono font-medium cursor-pointer transition-all shrink-0"
+                  title="Discard saved draft and reset all fields"
+                >
+                  <Trash2 size={13} />
+                  <span>Discard</span>
+                </button>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium font-mono uppercase text-[var(--text-secondary)] mb-1.5">
                 Project Name *
@@ -480,7 +746,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowPathHelp(!showPathHelp)}
-                    title="How to get folder path"
+                    title="How to select repository folder"
                     className="monochrome-btn p-1 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-subtle)] transition-colors cursor-pointer flex items-center"
                   >
                     <CircleHelp size={13} />
@@ -496,7 +762,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
                       <div className="flex items-start justify-between gap-2 mb-2 pb-1.5 border-b border-[var(--border-color)] relative z-10">
                         <span className="font-semibold text-xs text-[var(--text-primary)]">
-                          How to find the path
+                          Selecting your folder
                         </span>
                         <button
                           type="button"
@@ -510,15 +776,11 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                       <div className="space-y-1.5 text-[var(--text-secondary)] leading-relaxed relative z-10">
                         <div className="flex items-start gap-1.5">
                           <span className="text-[var(--text-primary)] font-bold">1.</span>
-                          <span>Open <strong>File Explorer</strong> and go to your project folder.</span>
+                          <span>Click <strong>Browse</strong> to choose your folder directly via File Explorer.</span>
                         </div>
                         <div className="flex items-start gap-1.5">
                           <span className="text-[var(--text-primary)] font-bold">2.</span>
-                          <span>Click the address bar at the top (or press <kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + L</kbd>).</span>
-                        </div>
-                        <div className="flex items-start gap-1.5">
-                          <span className="text-[var(--text-primary)] font-bold">3.</span>
-                          <span>Copy the path (<kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + C</kbd>) and paste it here.</span>
+                          <span>Or open <strong>File Explorer</strong>, press <kbd className="px-1 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px]">Ctrl + L</kbd> to copy the path, and paste it here.</span>
                         </div>
                       </div>
 
@@ -530,44 +792,59 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 </div>
               </div>
 
-              <div className="relative">
-                <Folder
-                  size={14}
-                  className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
-                    pathValidation.status === 'invalid'
-                      ? 'text-rose-500'
-                      : pathValidation.status === 'valid'
-                      ? 'text-emerald-500'
-                      : 'text-[var(--text-tertiary)]'
-                  }`}
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="C:\Users\...\Projects\api"
-                  value={path}
-                  onChange={(e) => handlePathChange(e.target.value)}
-                  className={`monochrome-input w-full pl-9 pr-9 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] transition-colors ${
-                    pathValidation.status === 'invalid'
-                      ? '!border-rose-500 focus:!border-rose-500 !ring-rose-500/20'
-                      : pathValidation.status === 'valid'
-                      ? '!border-emerald-500/50'
-                      : ''
-                  }`}
-                />
+              {/* Input + Native Browse Button Group */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 min-w-0">
+                  <Folder
+                    size={14}
+                    className={`absolute left-3 top-1/2 -translate-y-1/2 transition-colors ${
+                      pathValidation.status === 'invalid'
+                        ? 'text-rose-500'
+                        : pathValidation.status === 'valid'
+                        ? 'text-emerald-500'
+                        : 'text-[var(--text-tertiary)]'
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    required
+                    placeholder="C:\Users\...\Projects\api"
+                    value={path}
+                    onChange={(e) => handlePathChange(e.target.value)}
+                    className={`monochrome-input w-full pl-9 pr-9 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] transition-colors ${
+                      pathValidation.status === 'invalid'
+                        ? '!border-rose-500 focus:!border-rose-500 !ring-rose-500/20'
+                        : pathValidation.status === 'valid'
+                        ? '!border-emerald-500/50'
+                        : ''
+                    }`}
+                  />
 
-                {/* Status Indicator Icon in right edge of input */}
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
-                  {pathValidation.status === 'checking' && (
-                    <RefreshCw size={13} className="animate-spin text-[var(--text-secondary)]" />
-                  )}
-                  {pathValidation.status === 'valid' && (
-                    <CheckCircle2 size={14} className="text-emerald-500" />
-                  )}
-                  {pathValidation.status === 'invalid' && (
-                    <AlertCircle size={14} className="text-rose-500" />
-                  )}
+                  {/* Status Indicator Icon in right edge of input */}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center pointer-events-none">
+                    {pathValidation.status === 'checking' && (
+                      <RefreshCw size={13} className="animate-spin text-[var(--text-secondary)]" />
+                    )}
+                    {pathValidation.status === 'valid' && (
+                      <CheckCircle2 size={14} className="text-emerald-500" />
+                    )}
+                    {pathValidation.status === 'invalid' && (
+                      <AlertCircle size={14} className="text-rose-500" />
+                    )}
+                  </div>
                 </div>
+
+                {/* Browse Button */}
+                <button
+                  type="button"
+                  onClick={handleBrowseFolder}
+                  disabled={isBrowsing}
+                  className="monochrome-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-card)] hover:border-[var(--border-hover)] text-xs font-mono font-medium text-[var(--text-primary)] transition-all cursor-pointer shrink-0 shadow-2xs disabled:opacity-50"
+                  title="Browse computer to select repository folder"
+                >
+                  <FolderOpen size={14} className="text-sky-500 shrink-0" />
+                  <span>{isBrowsing ? 'Browsing...' : 'Browse'}</span>
+                </button>
               </div>
 
               {/* Status Message / Error Fallback Alert */}
@@ -610,6 +887,36 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   <span className="text-[11px]">Verifying path on disk...</span>
                 </div>
               )}
+            </div>
+
+            {/* GitHub / Remote Repository URL Field */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-medium font-mono uppercase text-[var(--text-secondary)]">
+                  GitHub / Remote URL (Optional)
+                </label>
+                {githubUrl.trim() && (
+                  <span className="text-[10px] text-sky-500 font-mono truncate max-w-[220px]">
+                    {formatRepoWebUrl(githubUrl)}
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <GithubIcon
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]"
+                />
+                <input
+                  type="text"
+                  placeholder="https://github.com/username/project or owner/repo"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  className="monochrome-input w-full pl-9 pr-3.5 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                />
+              </div>
+              <p className="mt-1 text-[10px] font-mono text-[var(--text-tertiary)]">
+                Auto-detected from Git if present. Enables 1-click browser redirect in the repository modal.
+              </p>
             </div>
 
             {/* Custom Category & Priority Dropdowns */}
@@ -709,20 +1016,14 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                       className="p-3.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-subtle)] space-y-3"
                     >
                       {/* Service Header Row */}
-                      <div className="flex items-center justify-between pb-2 border-b border-[var(--border-color)]">
+                      <div className="flex items-center justify-between pb-2.5 border-b border-[var(--border-color)]">
                         <div className="flex items-center gap-2">
                           <span className="w-5 h-5 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[10px] font-mono font-bold flex items-center justify-center text-[var(--text-primary)]">
                             {index + 1}
                           </span>
-                          <input
-                            type="text"
-                            placeholder={`Service ${index + 1} Name`}
-                            value={service.name}
-                            onChange={(e) =>
-                              handleUpdateService(index, { name: e.target.value })
-                            }
-                            className="bg-transparent border-none text-xs font-mono font-medium text-[var(--text-primary)] placeholder-[var(--text-tertiary)] focus:outline-none focus:ring-0 p-0"
-                          />
+                          <span className="text-xs font-mono font-semibold text-[var(--text-primary)]">
+                            {service.name.trim() || `Service #${index + 1}`}
+                          </span>
                         </div>
 
                         {services.length > 1 && (
@@ -735,6 +1036,34 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                             <Trash2 size={13} />
                           </button>
                         )}
+                      </div>
+
+                      {/* Explicit Service Name Input */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-mono uppercase text-[var(--text-secondary)]">
+                            Service Name *
+                          </label>
+                          <span className="text-[10px] font-mono text-[var(--text-tertiary)]">
+                            Identifies process (e.g. Frontend vs Backend)
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <Tag
+                            size={12}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none"
+                          />
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Frontend, Backend API, Webhook Worker, Docs"
+                            value={service.name}
+                            onChange={(e) =>
+                              handleUpdateService(index, { name: e.target.value })
+                            }
+                            className="monochrome-input w-full pl-8 pr-3 py-1.5 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                          />
+                        </div>
                       </div>
 
                       {/* 2 Required Input Fields: Folder Dropdown & Command Input */}
@@ -754,17 +1083,29 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
                           <CustomSelect
                             value={selectValue}
                             onChange={(val) => {
-                              if (val === '__custom__') {
-                                handleUpdateService(index, {
-                                  isCustomFolder: true,
-                                  folder: service.folder === './' ? './' : service.folder,
-                                });
-                              } else {
-                                handleUpdateService(index, {
-                                  folder: val,
-                                  isCustomFolder: false,
-                                });
+                              const chosenFolder =
+                                val === '__custom__'
+                                  ? service.folder === './'
+                                    ? './'
+                                    : service.folder
+                                  : val;
+                              const updates: Partial<ServiceFormItem> = {
+                                isCustomFolder: val === '__custom__',
+                                folder: chosenFolder,
+                              };
+                              if (
+                                !service.name.trim() ||
+                                service.name === 'Frontend' ||
+                                service.name === 'Backend API' ||
+                                service.name === 'Main Service' ||
+                                service.name.startsWith('Service ')
+                              ) {
+                                updates.name = inferServiceNameFromFolder(
+                                  chosenFolder,
+                                  index
+                                );
                               }
+                              handleUpdateService(index, updates);
                             }}
                             options={dynamicFolderOptions}
                             menuWidth="w-full sm:min-w-[280px]"
@@ -881,35 +1222,49 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({
             )}
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[var(--border-color)]">
-              <button
-                type="button"
-                onClick={onClose}
-                className="monochrome-btn px-4 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting || pathValidation.status === 'invalid'}
-                className={`monochrome-btn inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium transition-all shadow-xs ${
-                  isSubmitting || pathValidation.status === 'invalid'
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'hover:opacity-90 cursor-pointer'
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw size={13} className="animate-spin" />
-                    <span>Verifying Path...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save size={13} />
-                    <span>{initialProject ? 'Save Changes' : 'Add Repository'}</span>
-                  </>
+            <div className="flex items-center justify-between pt-4 border-t border-[var(--border-color)]">
+              <div>
+                {isRestoredDraft && !initialProject && (
+                  <button
+                    type="button"
+                    onClick={handleDiscardDraft}
+                    className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-500/30 hover:border-amber-500/60 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 text-xs font-mono cursor-pointer transition-colors"
+                  >
+                    <Trash2 size={13} />
+                    <span>Discard Draft</span>
+                  </button>
                 )}
-              </button>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="monochrome-btn px-4 py-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-canvas)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs font-mono cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || pathValidation.status === 'invalid'}
+                  className={`monochrome-btn inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium transition-all shadow-xs ${
+                    isSubmitting || pathValidation.status === 'invalid'
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'hover:opacity-90 cursor-pointer'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw size={13} className="animate-spin" />
+                      <span>Verifying Path...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save size={13} />
+                      <span>{initialProject ? 'Save Changes' : 'Add Repository'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </form>
         </div>

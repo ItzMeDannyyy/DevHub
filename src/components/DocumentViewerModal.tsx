@@ -3,7 +3,6 @@ import {
   X,
   Copy,
   Check,
-  ExternalLink,
   FileText,
   FileCode2,
   FileJson,
@@ -22,6 +21,7 @@ import {
 } from 'lucide-react';
 import { FileTreeNode } from '../types';
 import { readFileContent, FileContentData, openInIde, openInFileManager } from '../services/tauriBridge';
+import { VsCodeIcon } from './VsCodeIcon';
 
 interface DocumentViewerModalProps {
   file: FileTreeNode | null;
@@ -301,7 +301,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
               className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
               title="Open in VS Code"
             >
-              <ExternalLink size={12} />
+              <VsCodeIcon size={12} />
               <span className="hidden sm:inline">VS Code</span>
             </button>
 
@@ -382,7 +382,7 @@ export const DocumentViewerModal: React.FC<DocumentViewerModalProps> = ({
                   onClick={() => openInIde(file.path)}
                   className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
                 >
-                  <ExternalLink size={12} />
+                  <VsCodeIcon size={12} />
                   <span>Open in VS Code</span>
                 </button>
                 <button

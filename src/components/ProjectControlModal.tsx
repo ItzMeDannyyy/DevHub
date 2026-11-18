@@ -15,7 +15,7 @@ import {
   Star,
   Edit3,
   Trash2,
-  Activity,
+  Server,
   Folder,
   Layers,
   FolderTree,
@@ -24,22 +24,158 @@ import {
   RefreshCw,
   ChevronDown,
   Plus,
+  Sparkles,
+  Code2,
+  Code,
+  Cpu,
 } from 'lucide-react';
 import { Project, getProjectServices } from '../types';
 import { formatDeadlineDisplay } from '../utils/date';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { GithubIcon } from './GithubIcon';
+import { VsCodeIcon } from './VsCodeIcon';
 import {
   validateDirectoryPath,
   listGitBranches,
   switchGitBranch,
+  openExternalUrl,
+  getGitRemoteUrl,
+  setGitRemoteUrl,
+  formatRepoWebUrl,
 } from '../services/tauriBridge';
+
+interface IdeLauncherOption {
+  id: string;
+  name: string;
+  command: string;
+  badge?: string;
+  icon: (size: number) => React.ReactNode;
+}
+
+export const IDE_LAUNCHER_OPTIONS: IdeLauncherOption[] = [
+  {
+    id: 'vscode',
+    name: 'VS Code',
+    command: 'code',
+    badge: 'Popular',
+    icon: (s) => <VsCodeIcon size={s} />,
+  },
+  {
+    id: 'cursor',
+    name: 'Cursor AI',
+    command: 'cursor',
+    badge: 'AI',
+    icon: (s) => <Sparkles size={s} className="text-sky-400" />,
+  },
+  {
+    id: 'sublime',
+    name: 'Sublime Text',
+    command: 'subl',
+    icon: (s) => <Code2 size={s} className="text-amber-500" />,
+  },
+  {
+    id: 'webstorm',
+    name: 'WebStorm',
+    command: 'webstorm',
+    badge: 'JetBrains',
+    icon: (s) => <Code size={s} className="text-teal-400" />,
+  },
+  {
+    id: 'intellij',
+    name: 'IntelliJ IDEA',
+    command: 'idea',
+    badge: 'JetBrains',
+    icon: (s) => <Layers size={s} className="text-rose-400" />,
+  },
+  {
+    id: 'pycharm',
+    name: 'PyCharm',
+    command: 'pycharm',
+    badge: 'JetBrains',
+    icon: (s) => <Terminal size={s} className="text-emerald-400" />,
+  },
+  {
+    id: 'zed',
+    name: 'Zed Editor',
+    command: 'zed',
+    badge: 'Fast',
+    icon: (s) => <Terminal size={s} className="text-indigo-400" />,
+  },
+  {
+    id: 'code-insiders',
+    name: 'VS Code Insiders',
+    command: 'code-insiders',
+    badge: 'Preview',
+    icon: (s) => <VsCodeIcon size={s} className="text-emerald-500" />,
+  },
+];
+
+interface TerminalLauncherOption {
+  id: string;
+  name: string;
+  command: string;
+  badge?: string;
+  description: string;
+  icon: (size: number) => React.ReactNode;
+}
+
+export const TERMINAL_LAUNCHER_OPTIONS: TerminalLauncherOption[] = [
+  {
+    id: 'powershell',
+    name: 'PowerShell',
+    command: 'powershell',
+    badge: 'Default',
+    description: 'Windows PowerShell 5.1',
+    icon: (s) => <Terminal size={s} className="text-sky-400" />,
+  },
+  {
+    id: 'cmd',
+    name: 'Command Prompt',
+    command: 'cmd',
+    badge: 'CMD',
+    description: 'Classic Windows cmd.exe',
+    icon: (s) => <Terminal size={s} className="text-amber-400" />,
+  },
+  {
+    id: 'git-bash',
+    name: 'Git Bash',
+    command: 'git-bash',
+    badge: 'Bash',
+    description: 'MINGW64 Git Bash Shell',
+    icon: (s) => <GitBranch size={s} className="text-orange-400" />,
+  },
+  {
+    id: 'wsl',
+    name: 'WSL (Linux)',
+    command: 'wsl',
+    badge: 'Linux',
+    description: 'Windows Subsystem for Linux',
+    icon: (s) => <Cpu size={s} className="text-emerald-400" />,
+  },
+  {
+    id: 'pwsh',
+    name: 'PowerShell 7',
+    command: 'pwsh',
+    badge: 'Core',
+    description: 'Cross-platform PowerShell 7+',
+    icon: (s) => <Terminal size={s} className="text-blue-400" />,
+  },
+  {
+    id: 'wt',
+    name: 'Windows Terminal',
+    command: 'wt',
+    badge: 'WT',
+    description: 'Modern tabbed terminal host',
+    icon: (s) => <Layers size={s} className="text-indigo-400" />,
+  },
+];
 
 interface ProjectControlModalProps {
   project: Project | null;
   isOpen: boolean;
   onClose: () => void;
-  onOpenIde: (p: Project) => void;
-  onOpenTerminal: (p: Project) => void;
+  onOpenIde: (p: Project, customIde?: string) => void;
+  onOpenTerminal: (p: Project, customTerminal?: string) => void;
   onOpenFolder: (p: Project) => void;
   onOpenWorkingTree: (p: Project) => void;
   onStartService: (p: Project, serviceId: string, cmd?: string) => void;
@@ -51,10 +187,11 @@ interface ProjectControlModalProps {
   onDelete: (id: string) => void;
   onRefreshGit?: (p: Project) => void;
   onBranchSwitched?: (updatedProject: Project) => void;
+  onUpdateProject?: (updatedProject: Project) => void;
 }
 
 export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
-  project,
+  project: propProject,
   isOpen,
   onClose,
   onOpenIde,
@@ -70,12 +207,40 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
   onDelete,
   onRefreshGit,
   onBranchSwitched,
+  onUpdateProject,
 }) => {
+  const [cachedProject, setCachedProject] = useState<Project | null>(propProject);
+
+  useEffect(() => {
+    if (propProject) {
+      setCachedProject(propProject);
+    }
+  }, [propProject]);
+
+  const project = propProject || cachedProject;
   const [copied, setCopied] = useState(false);
   const [customCmds, setCustomCmds] = useState<Record<string, string>>({});
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [editingServiceName, setEditingServiceName] = useState('');
+  const [isIdeDropdownOpen, setIsIdeDropdownOpen] = useState(false);
+  const [isTerminalDropdownOpen, setIsTerminalDropdownOpen] = useState(false);
+  const [selectedIdeId, setSelectedIdeId] = useState<string>('vscode');
+  const [selectedTerminalId, setSelectedTerminalId] = useState<string>('powershell');
+
+  const ideDropdownRef = useRef<HTMLDivElement>(null);
+  const terminalDropdownRef = useRef<HTMLDivElement>(null);
+
   const [isRendered, setIsRendered] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [isPathValid, setIsPathValid] = useState<boolean | null>(null);
+
+  // GitHub / Remote Repository URL states
+  const [detectedRemoteUrl, setDetectedRemoteUrl] = useState<string | null>(null);
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [customUrlInput, setCustomUrlInput] = useState('');
+  const [syncWithGitRemote, setSyncWithGitRemote] = useState(true);
+  const [isSavingUrl, setIsSavingUrl] = useState(false);
+  const [urlSaveError, setUrlSaveError] = useState<string | null>(null);
 
   // Git Branch switching states
   const [branches, setBranches] = useState<string[]>([]);
@@ -88,6 +253,134 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
 
   const comboboxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Active repository URL resolution (user defined override -> git status remote -> live probed remote)
+  const activeRepoUrl = useMemo(() => {
+    if (project?.githubUrl && project.githubUrl.trim()) {
+      return project.githubUrl.trim();
+    }
+    if (project?.gitStatus?.remoteUrl && project.gitStatus.remoteUrl.trim()) {
+      return project.gitStatus.remoteUrl.trim();
+    }
+    return detectedRemoteUrl || null;
+  }, [project?.githubUrl, project?.gitStatus?.remoteUrl, detectedRemoteUrl]);
+
+  const browserWebUrl = useMemo(() => {
+    return activeRepoUrl ? formatRepoWebUrl(activeRepoUrl) : null;
+  }, [activeRepoUrl]);
+
+  // Query git remote origin if not already stored
+  useEffect(() => {
+    let isMounted = true;
+    if (isOpen && project?.path) {
+      if (!project.githubUrl && !project.gitStatus?.remoteUrl) {
+        getGitRemoteUrl(project.path).then((url) => {
+          if (isMounted) {
+            setDetectedRemoteUrl(url);
+          }
+        });
+      } else {
+        setDetectedRemoteUrl(null);
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, project?.path, project?.githubUrl, project?.gitStatus?.remoteUrl]);
+
+  const handleOpenGitHub = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (browserWebUrl) {
+      openExternalUrl(browserWebUrl);
+    }
+  };
+
+  const handleOpenUrlEditor = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCustomUrlInput(activeRepoUrl || '');
+    setUrlSaveError(null);
+    setIsEditingUrl(true);
+  };
+
+  const handleSaveRepoUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!project) return;
+    setIsSavingUrl(true);
+    setUrlSaveError(null);
+
+    const cleanInput = customUrlInput.trim();
+    const formattedWeb = cleanInput ? formatRepoWebUrl(cleanInput) : '';
+
+    try {
+      if (syncWithGitRemote && project.path) {
+        try {
+          await setGitRemoteUrl(project.path, cleanInput);
+        } catch (err: any) {
+          console.warn('Could not set git remote origin:', err);
+        }
+      }
+
+      const updated: Project = {
+        ...project,
+        githubUrl: formattedWeb || undefined,
+        gitStatus: project.gitStatus
+          ? {
+              ...project.gitStatus,
+              remoteUrl: cleanInput || undefined,
+            }
+          : undefined,
+      };
+
+      setDetectedRemoteUrl(cleanInput || null);
+      if (onUpdateProject) {
+        onUpdateProject(updated);
+      }
+      setIsEditingUrl(false);
+    } catch (err: any) {
+      setUrlSaveError(
+        typeof err === 'string' ? err : err?.message || 'Failed to save repository URL'
+      );
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
+
+  const handleRemoveRepoUrl = async () => {
+    if (!project) return;
+    setIsSavingUrl(true);
+    setUrlSaveError(null);
+    try {
+      if (syncWithGitRemote && project.path) {
+        try {
+          await setGitRemoteUrl(project.path, '');
+        } catch {
+          // ignore
+        }
+      }
+      const updated: Project = {
+        ...project,
+        githubUrl: undefined,
+        gitStatus: project.gitStatus
+          ? {
+              ...project.gitStatus,
+              remoteUrl: undefined,
+            }
+          : undefined,
+      };
+      setDetectedRemoteUrl(null);
+      setCustomUrlInput('');
+      if (onUpdateProject) {
+        onUpdateProject(updated);
+      }
+      setIsEditingUrl(false);
+    } catch (err: any) {
+      setUrlSaveError(
+        typeof err === 'string' ? err : err?.message || 'Failed to remove repository URL'
+      );
+    } finally {
+      setIsSavingUrl(false);
+    }
+  };
 
   // Sync branchSearch when project's current branch changes
   useEffect(() => {
@@ -263,12 +556,102 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
         onRefreshGit(project);
       }
     });
-  }, [project?.path, isOpen]);
+  }, [project?.id, isOpen]);
 
-  // Reset custom commands when project changes
+  // Reset custom commands and inline editing when project changes
   useEffect(() => {
     setCustomCmds({});
-  }, [project?.id]);
+    setEditingServiceId(null);
+    setEditingServiceName('');
+    setIsIdeDropdownOpen(false);
+    setIsTerminalDropdownOpen(false);
+  }, [project?.id, isOpen]);
+
+  // Outside click listener for launcher dropdowns
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        ideDropdownRef.current &&
+        !ideDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsIdeDropdownOpen(false);
+      }
+      if (
+        terminalDropdownRef.current &&
+        !terminalDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsTerminalDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const currentIde = useMemo(() => {
+    return (
+      IDE_LAUNCHER_OPTIONS.find((opt) => opt.id === selectedIdeId) ||
+      IDE_LAUNCHER_OPTIONS[0]
+    );
+  }, [selectedIdeId]);
+
+  const currentTerminal = useMemo(() => {
+    return (
+      TERMINAL_LAUNCHER_OPTIONS.find((opt) => opt.id === selectedTerminalId) ||
+      TERMINAL_LAUNCHER_OPTIONS[0]
+    );
+  }, [selectedTerminalId]);
+
+  const handleStartEditServiceName = (id: string, currentName: string) => {
+    setEditingServiceId(id);
+    setEditingServiceName(currentName);
+  };
+
+  const handleSaveServiceName = (serviceId: string) => {
+    if (!project) return;
+    const trimmed = editingServiceName.trim();
+    if (!trimmed) {
+      setEditingServiceId(null);
+      return;
+    }
+    const currentServices = getProjectServices(project);
+    const updatedServices = currentServices.map((s) =>
+      s.id === serviceId ? { ...s, name: trimmed } : s
+    );
+    const updatedProject: Project = {
+      ...project,
+      services: updatedServices,
+    };
+    if (onUpdateProject) {
+      onUpdateProject(updatedProject);
+    }
+    setEditingServiceId(null);
+  };
+
+  const handleCancelEditServiceName = () => {
+    setEditingServiceId(null);
+    setEditingServiceName('');
+  };
+
+  const handleSaveServiceCommand = (serviceId: string, newCmd: string) => {
+    if (!project) return;
+    const trimmed = newCmd.trim();
+    if (!trimmed) return;
+    const currentServices = getProjectServices(project);
+    const target = currentServices.find((s) => s.id === serviceId);
+    if (target && target.command === trimmed) return;
+
+    const updatedServices = currentServices.map((s) =>
+      s.id === serviceId ? { ...s, command: trimmed } : s
+    );
+    const updatedProject: Project = {
+      ...project,
+      services: updatedServices,
+      devCommand: updatedServices[0]?.command || project.devCommand,
+    };
+    if (onUpdateProject) {
+      onUpdateProject(updatedProject);
+    }
+  };
 
   // Escape key listener to close drawer
   useEffect(() => {
@@ -300,20 +683,52 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
       className={`fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out ${
         isVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
-      onClick={onClose}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
     >
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div
+        className="fixed inset-y-0 right-0 max-w-full flex pl-10"
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            e.preventDefault();
+            e.stopPropagation();
+            onClose();
+          }
+        }}
+      >
         {/* Slide-over Drawer Panel (Right to Left) */}
         <div
           onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className={`w-screen max-w-xl bg-[var(--bg-card)] border-l border-[var(--border-color)] shadow-2xl flex flex-col transform transition-transform duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] ${
             isVisible ? 'translate-x-0' : 'translate-x-full'
           }`}
         >
           {/* Header */}
-          <div className="flex items-start justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0">
-            <div>
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <div className="flex items-start justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0 gap-3">
+            {/* Title First, Badges Below */}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <h2 className="text-lg font-bold tracking-tight text-[var(--text-primary)] truncate font-sans">
+                {project.name}
+              </h2>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <CategoryBadge category={project.category} size="sm" />
                 <PriorityBadge priority={project.priority} size="sm" />
                 {project.deadline && (
@@ -323,34 +738,193 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                   </span>
                 )}
               </div>
-              <h2 className="text-lg font-semibold tracking-tight text-[var(--text-primary)]">
-                {project.name}
-              </h2>
             </div>
 
-            <div className="flex items-center gap-1">
+            {/* Header Action Buttons (Balanced, Clean Size) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* GitHub Repo Button or Add GitHub URL Button */}
+              {browserWebUrl ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleOpenGitHub}
+                    className="monochrome-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-primary)] hover:border-sky-500/50 hover:bg-sky-500/10 text-xs font-mono font-medium transition-all cursor-pointer shadow-2xs group"
+                    title={`Open GitHub repository in browser: ${browserWebUrl}`}
+                  >
+                    <GithubIcon size={14} className="text-sky-500 shrink-0 group-hover:scale-110 transition-transform" />
+                    <span className="hidden sm:inline font-semibold">GitHub</span>
+                    <ExternalLink size={11} className="text-[var(--text-tertiary)] group-hover:text-[var(--text-primary)] shrink-0" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenUrlEditor}
+                    className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-hover)] hover:bg-[var(--bg-canvas)] transition-all cursor-pointer shadow-2xs"
+                    title="Edit repository URL"
+                  >
+                    <Edit3 size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleOpenUrlEditor}
+                  className="monochrome-btn inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-[var(--border-color)] hover:border-sky-500/50 bg-[var(--bg-card)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-sky-500/5 text-xs font-mono font-medium transition-all cursor-pointer shadow-2xs group"
+                  title="Link a GitHub repository URL to this project"
+                >
+                  <GithubIcon size={14} className="text-sky-500 shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="hidden sm:inline font-medium">Add GitHub Repo</span>
+                  <span className="sm:hidden font-medium">GitHub</span>
+                </button>
+              )}
+
+              {/* Star Favorite Button */}
               <button
+                type="button"
                 onClick={() => onToggleFavorite(project.id)}
-                className={`p-1.5 rounded-full hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer ${
+                className={`p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-canvas)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs ${
                   project.favorite
-                    ? 'text-amber-400 fill-amber-400'
+                    ? 'text-amber-400 fill-amber-400 border-amber-500/30 bg-amber-500/5'
                     : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'
                 }`}
                 title={project.favorite ? 'Unstar' : 'Star'}
               >
                 <Star
-                  size={16}
+                  size={15}
                   fill={project.favorite ? 'currentColor' : 'none'}
                 />
               </button>
+
+              {/* Close (X) Button */}
               <button
+                type="button"
                 onClick={onClose}
-                className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-canvas)] hover:border-[var(--border-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-all cursor-pointer shadow-2xs"
+                title="Close drawer (Esc)"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
+
+          {/* Edit Repository URL Popover Modal */}
+          {isEditingUrl && (
+            <div
+              className="absolute inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+              onClick={() => setIsEditingUrl(false)}
+            >
+              <div
+                className="w-full max-w-md bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl shadow-2xl overflow-hidden animate-scale-in"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)]">
+                  <div className="flex items-center gap-2">
+                    <GithubIcon size={16} className="text-sky-500" />
+                    <h3 className="text-sm font-semibold text-[var(--text-primary)] font-sans">
+                      {activeRepoUrl ? 'Edit GitHub URL' : 'Link GitHub Repository'}
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(false)}
+                    className="p-1 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveRepoUrl} className="p-5 space-y-4">
+                  <p className="text-xs text-[var(--text-secondary)] font-sans leading-relaxed">
+                    Enter the GitHub repository link (or clone URL) for <strong>{project.name}</strong>.
+                  </p>
+
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-[var(--text-secondary)] mb-1.5">
+                      Repository URL
+                    </label>
+                    <div className="relative">
+                      <GithubIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="https://github.com/username/project or owner/repo"
+                        value={customUrlInput}
+                        onChange={(e) => setCustomUrlInput(e.target.value)}
+                        className="monochrome-input w-full pl-9 pr-3.5 py-2 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)]"
+                      />
+                    </div>
+                    {customUrlInput.trim() && (
+                      <div className="mt-2 p-2 rounded-md bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-tertiary)] flex items-center justify-between">
+                        <span className="truncate pr-2 text-sky-500">
+                          {formatRepoWebUrl(customUrlInput)}
+                        </span>
+                        <span className="text-[10px] uppercase font-bold shrink-0">Web Preview</span>
+                      </div>
+                    )}
+                    {urlSaveError && (
+                      <p className="mt-1.5 text-xs font-mono text-rose-500">
+                        {urlSaveError}
+                      </p>
+                    )}
+                  </div>
+
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={syncWithGitRemote}
+                      onChange={(e) => setSyncWithGitRemote(e.target.checked)}
+                      className="mt-0.5 rounded border-[var(--border-color)] accent-sky-500"
+                    />
+                    <span className="text-xs text-[var(--text-secondary)] font-sans">
+                      Also set as Git remote origin on disk (<code>git remote set-url origin</code>)
+                    </span>
+                  </label>
+
+                  <div className="pt-2 flex items-center justify-between border-t border-[var(--border-color)]">
+                    {activeRepoUrl ? (
+                      <button
+                        type="button"
+                        onClick={handleRemoveRepoUrl}
+                        disabled={isSavingUrl}
+                        className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-500/30 hover:border-rose-500/60 bg-rose-500/10 text-rose-500 text-xs font-mono cursor-pointer transition-colors"
+                      >
+                        <Trash2 size={12} />
+                        <span>Remove Link</span>
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingUrl(false)}
+                        className="monochrome-btn px-3 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-subtle)] text-xs font-mono text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingUrl}
+                        className="monochrome-btn inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs disabled:opacity-50"
+                      >
+                        {isSavingUrl ? (
+                          <>
+                            <RefreshCw size={12} className="animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check size={12} />
+                            <span>Save URL</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* Drawer Body */}
           <div className="p-6 space-y-6 flex-1 overflow-y-auto">
@@ -403,23 +977,158 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
               )}
             </div>
 
-            {/* Launch Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => onOpenIde(project)}
-                className="monochrome-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
-              >
-                <ExternalLink size={14} />
-                <span>Launch VS Code</span>
-              </button>
+            {/* Launch Buttons with Dropdown Options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-20">
+              {/* IDE Split Button */}
+              <div className="relative" ref={ideDropdownRef}>
+                <div className="flex items-stretch rounded-md shadow-xs bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] overflow-hidden">
+                  <button
+                    onClick={() => onOpenIde(project, currentIde.command)}
+                    className="monochrome-btn flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium hover:opacity-90 cursor-pointer truncate"
+                    title={`Launch in ${currentIde.name}`}
+                  >
+                    {currentIde.icon(14)}
+                    <span className="truncate">Launch {currentIde.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsIdeDropdownOpen((prev) => !prev);
+                      setIsTerminalDropdownOpen(false);
+                    }}
+                    className={`px-2.5 py-2.5 border-l border-white/20 hover:bg-black/10 transition-colors cursor-pointer flex items-center justify-center ${
+                      isIdeDropdownOpen ? 'bg-black/15' : ''
+                    }`}
+                    title="Choose Editor to Launch (Sublime, Cursor, JetBrains...)"
+                  >
+                    <ChevronDown
+                      size={13}
+                      className={`transition-transform duration-200 ${
+                        isIdeDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
 
-              <button
-                onClick={() => onOpenTerminal(project)}
-                className="monochrome-btn inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] text-[var(--text-primary)] text-xs font-mono font-medium hover:border-[var(--border-hover)] cursor-pointer"
-              >
-                <Terminal size={14} />
-                <span>Open Terminal</span>
-              </button>
+                {/* IDE Dropdown Menu */}
+                {isIdeDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xl z-50 text-xs font-mono backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+                    <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--text-tertiary)] border-b border-[var(--border-color)] mb-1">
+                      Choose Editor
+                    </div>
+                    {IDE_LAUNCHER_OPTIONS.map((opt) => {
+                      const isSelected = opt.id === currentIde.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedIdeId(opt.id);
+                            setIsIdeDropdownOpen(false);
+                            onOpenIde(project, opt.command);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer hover:bg-[var(--bg-subtle)] ${
+                            isSelected
+                              ? 'text-sky-500 font-semibold bg-[var(--bg-subtle)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="shrink-0">{opt.icon(14)}</span>
+                            <span className="truncate">{opt.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {opt.badge && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[var(--text-tertiary)] font-normal">
+                                {opt.badge}
+                              </span>
+                            )}
+                            {isSelected && <Check size={12} className="text-sky-500 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Terminal Split Button */}
+              <div className="relative" ref={terminalDropdownRef}>
+                <div className="flex items-stretch rounded-md border border-[var(--border-color)] bg-[var(--bg-subtle)] hover:border-[var(--border-hover)] text-[var(--text-primary)] shadow-xs overflow-hidden transition-colors">
+                  <button
+                    onClick={() => onOpenTerminal(project, currentTerminal.command)}
+                    className="monochrome-btn flex-1 inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-mono font-medium cursor-pointer truncate hover:text-[var(--text-primary)]"
+                    title={`Open in ${currentTerminal.name}`}
+                  >
+                    {currentTerminal.icon(14)}
+                    <span className="truncate">{currentTerminal.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTerminalDropdownOpen((prev) => !prev);
+                      setIsIdeDropdownOpen(false);
+                    }}
+                    className={`px-2.5 py-2.5 border-l border-[var(--border-color)] hover:bg-[var(--bg-canvas)] transition-colors cursor-pointer flex items-center justify-center ${
+                      isTerminalDropdownOpen ? 'bg-[var(--bg-canvas)]' : ''
+                    }`}
+                    title="Choose Terminal Shell (CMD, WSL, Git Bash, PowerShell...)"
+                  >
+                    <ChevronDown
+                      size={13}
+                      className={`transition-transform duration-200 ${
+                        isTerminalDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Terminal Dropdown Menu */}
+                {isTerminalDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] shadow-xl z-50 text-xs font-mono backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+                    <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--text-tertiary)] border-b border-[var(--border-color)] mb-1">
+                      Choose Terminal Shell
+                    </div>
+                    {TERMINAL_LAUNCHER_OPTIONS.map((opt) => {
+                      const isSelected = opt.id === currentTerminal.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedTerminalId(opt.id);
+                            setIsTerminalDropdownOpen(false);
+                            onOpenTerminal(project, opt.command);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors cursor-pointer hover:bg-[var(--bg-subtle)] ${
+                            isSelected
+                              ? 'text-sky-500 font-semibold bg-[var(--bg-subtle)]'
+                              : 'text-[var(--text-primary)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="shrink-0">{opt.icon(14)}</span>
+                            <div className="truncate">
+                              <div className="truncate">{opt.name}</div>
+                              <div className="text-[10px] text-[var(--text-tertiary)] font-normal truncate">
+                                {opt.description}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            {opt.badge && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[var(--bg-canvas)] border border-[var(--border-color)] text-[var(--text-tertiary)] font-normal">
+                                {opt.badge}
+                              </span>
+                            )}
+                            {isSelected && <Check size={12} className="text-sky-500 shrink-0" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Working Tree Diagram Navigation Button */}
@@ -668,15 +1377,15 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
               </div>
             </div>
 
-            {/* Services & Process Controller */}
+            {/* Run Service and Commands */}
             <div className="p-4 rounded-xl border border-[var(--border-color)] bg-[var(--bg-subtle)]">
               {/* Process Controller Header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 pb-2.5 border-b border-[var(--border-color)]">
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <Activity size={13} className="text-[var(--text-primary)]" />
+                    <Server size={13} className="text-[var(--text-primary)]" />
                     <span className="text-xs font-mono uppercase tracking-wider text-[var(--text-primary)] font-semibold">
-                      Services & Process Controller
+                      Run Service and Commands
                     </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1">
@@ -745,10 +1454,83 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                     >
                       {/* Service Top Info */}
                       <div className="flex items-center justify-between pb-2 mb-2 border-b border-[var(--border-color)]">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-xs font-mono font-semibold text-[var(--text-primary)] truncate">
-                            {service.name || `Service ${index + 1}`}
-                          </span>
+                        <div className="flex items-center gap-2 truncate flex-1 mr-2">
+                          {editingServiceId === service.id ? (
+                            <div className="flex items-center gap-1.5 flex-1 max-w-[280px]">
+                              <input
+                                type="text"
+                                value={editingServiceName}
+                                onChange={(e) => setEditingServiceName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveServiceName(service.id);
+                                  if (e.key === 'Escape') handleCancelEditServiceName();
+                                }}
+                                autoFocus
+                                placeholder="Service name (e.g. Frontend, Backend)"
+                                className="monochrome-input px-2 py-0.5 text-xs font-mono font-semibold rounded w-full"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveServiceName(service.id)}
+                                className="p-1 rounded text-emerald-500 hover:bg-emerald-500/10 cursor-pointer"
+                                title="Save service name"
+                              >
+                                <Check size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditServiceName}
+                                className="p-1 rounded text-[var(--text-tertiary)] hover:bg-[var(--bg-card)] cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 group/name truncate">
+                              <span
+                                onClick={() =>
+                                  handleStartEditServiceName(
+                                    service.id,
+                                    service.name ||
+                                      (service.folder === './'
+                                        ? index === 0
+                                          ? 'Frontend'
+                                          : 'Backend API'
+                                        : service.folder.replace(/^\.\//, ''))
+                                  )
+                                }
+                                className="text-xs font-mono font-semibold text-[var(--text-primary)] hover:text-sky-400 cursor-pointer transition-colors truncate"
+                                title="Click to rename service name (e.g. Frontend vs Backend)"
+                              >
+                                {service.name ||
+                                  (service.folder === './'
+                                    ? index === 0
+                                      ? 'Frontend'
+                                      : 'Backend API'
+                                    : service.folder.replace(/^\.\//, ''))}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleStartEditServiceName(
+                                    service.id,
+                                    service.name ||
+                                      (service.folder === './'
+                                        ? index === 0
+                                          ? 'Frontend'
+                                          : 'Backend API'
+                                        : service.folder.replace(/^\.\//, ''))
+                                  )
+                                }
+                                className="opacity-0 group-hover/name:opacity-100 p-0.5 rounded text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all cursor-pointer"
+                                title="Rename service name"
+                              >
+                                <Edit3 size={11} />
+                              </button>
+                            </div>
+                          )}
+
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[var(--bg-subtle)] border border-[var(--border-color)] text-[10px] font-mono text-[var(--text-secondary)] shrink-0">
                             <Folder size={10} />
                             <span>{service.folder}</span>
@@ -787,6 +1569,13 @@ export const ProjectControlModal: React.FC<ProjectControlModalProps> = ({
                                 [service.id]: e.target.value,
                               }))
                             }
+                            onBlur={() => handleSaveServiceCommand(service.id, currentCmd)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleSaveServiceCommand(service.id, currentCmd);
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
                             placeholder="e.g. npm run dev"
                             className="monochrome-input w-full pl-6 pr-2.5 py-1.5 rounded-md text-xs font-mono placeholder-[var(--text-tertiary)] disabled:opacity-75 disabled:cursor-not-allowed"
                           />

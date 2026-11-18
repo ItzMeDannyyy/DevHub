@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   X,
-  Activity,
+  Server,
   Square,
   Folder,
   Terminal,
@@ -126,16 +126,16 @@ export const ActiveServicesModal: React.FC<ActiveServicesModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)] bg-[var(--bg-subtle)] shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-[var(--bg-card)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-primary)] shadow-2xs">
-              <Activity
+              <Server
                 size={16}
                 className={
-                  totalActiveServicesCount > 0 ? 'text-emerald-500 animate-pulse' : 'text-[var(--text-tertiary)]'
+                  totalActiveServicesCount > 0 ? 'text-emerald-500' : 'text-[var(--text-tertiary)]'
                 }
               />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-mono">
+                <h2 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-sans">
                   Active Services Monitor
                 </h2>
                 <span
@@ -219,7 +219,7 @@ export const ActiveServicesModal: React.FC<ActiveServicesModalProps> = ({
                           onClose();
                           onSelectProject?.(project);
                         }}
-                        className="text-xs font-mono font-bold text-[var(--text-primary)] hover:underline truncate text-left cursor-pointer flex items-center gap-1.5"
+                        className="text-xs font-sans font-bold text-[var(--text-primary)] hover:underline truncate text-left cursor-pointer flex items-center gap-1.5"
                         title="Click to view repository control deck"
                       >
                         <span className="truncate">{project.name}</span>
@@ -280,7 +280,7 @@ export const ActiveServicesModal: React.FC<ActiveServicesModalProps> = ({
                           <div className="space-y-1.5 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-mono font-bold text-[var(--text-primary)]">
-                                {service.name || 'Main Service'}
+                                {service.name || 'Frontend'}
                               </span>
 
                               {/* PID and Port Badges */}

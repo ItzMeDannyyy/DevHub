@@ -1,7 +1,8 @@
-import { Project, UserSettings, getProjectServices } from '../types';
+import { Project, UserSettings, getProjectServices, AddRepoDraft } from '../types';
 
 const PROJECTS_STORAGE_KEY = 'devhub_projects_v3';
 const SETTINGS_STORAGE_KEY = 'devhub_settings_v2';
+const DRAFT_STORAGE_KEY = 'devhub_add_repo_draft_v1';
 
 const LEGACY_MOCK_IDS = new Set([
   'devhub-core',
@@ -129,5 +130,58 @@ export const saveSettings = (settings: UserSettings): void => {
     localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch (err) {
     console.error('Failed to save settings:', err);
+  }
+};
+
+export const isDraftMeaningful = (draft: Partial<AddRepoDraft> | null | undefined): boolean => {
+  if (!draft) return false;
+  if (draft.name && draft.name.trim().length > 0) return true;
+  if (draft.path && draft.path.trim().length > 0) return true;
+  if (draft.githubUrl && draft.githubUrl.trim().length > 0) return true;
+  if (draft.notes && draft.notes.trim().length > 0) return true;
+  if (draft.deadline && draft.deadline.trim().length > 0) return true;
+  if (draft.services && draft.services.length > 0) {
+    if (draft.services.length > 1) return true;
+    const s0 = draft.services[0];
+    if (s0.name && s0.name !== 'Frontend') return true;
+    if (s0.folder && s0.folder !== './') return true;
+    if (s0.command && s0.command !== 'npm run dev') return true;
+  }
+  return false;
+};
+
+export const saveRepoDraft = (draft: AddRepoDraft): void => {
+  try {
+    if (isDraftMeaningful(draft)) {
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } else {
+      clearRepoDraft();
+    }
+  } catch (err) {
+    console.error('Failed to save repo draft:', err);
+  }
+};
+
+export const loadRepoDraft = (): AddRepoDraft | null => {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: AddRepoDraft = JSON.parse(raw);
+    if (!isDraftMeaningful(parsed)) {
+      clearRepoDraft();
+      return null;
+    }
+    return parsed;
+  } catch (err) {
+    console.error('Failed to load repo draft:', err);
+    return null;
+  }
+};
+
+export const clearRepoDraft = (): void => {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch (err) {
+    console.error('Failed to clear repo draft:', err);
   }
 };

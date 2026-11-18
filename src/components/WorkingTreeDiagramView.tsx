@@ -33,6 +33,7 @@ import {
 import { Project, FileTreeNode } from '../types';
 import { getDirectoryTree, openInIde, openInTerminal, openInFileManager } from '../services/tauriBridge';
 import { CategoryBadge, PriorityBadge } from './Badges';
+import { VsCodeIcon } from './VsCodeIcon';
 import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface WorkingTreeDiagramViewProps {
@@ -270,7 +271,7 @@ export const WorkingTreeDiagramView: React.FC<WorkingTreeDiagramViewProps> = ({
             <span className="w-6 h-6 rounded-md bg-[var(--bg-subtle)] border border-[var(--border-color)] flex items-center justify-center text-[var(--text-primary)]">
               <FolderTree size={13} />
             </span>
-            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-mono">
+            <h1 className="text-base font-semibold tracking-tight text-[var(--text-primary)] font-sans">
               {project.name}
             </h1>
             <CategoryBadge category={project.category} size="sm" />
@@ -284,7 +285,7 @@ export const WorkingTreeDiagramView: React.FC<WorkingTreeDiagramViewProps> = ({
               className="monochrome-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--accent-btn-bg)] text-[var(--accent-btn-text)] text-xs font-mono font-medium hover:opacity-90 cursor-pointer shadow-xs"
               title="Launch editor"
             >
-              <ExternalLink size={12} />
+              <VsCodeIcon size={12} />
               <span>Open in VS Code</span>
             </button>
             <button

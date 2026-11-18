@@ -8,6 +8,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  AlertTriangle,
 } from 'lucide-react';
 import { ThemeMode } from '../types';
 import { ThemeToggle } from './ThemeToggle';
@@ -19,6 +20,8 @@ interface NavbarProps {
   onOpenSettings: () => void;
   theme: ThemeMode;
   onThemeChange: (theme: ThemeMode) => void;
+  hasRepoDraft?: boolean;
+  onResumeDraft?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -28,6 +31,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   theme,
   onThemeChange,
+  hasRepoDraft = false,
+  onResumeDraft,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -73,9 +78,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const getThemeIcon = () => {
-    if (theme === 'light') return <Sun size={15} />;
-    if (theme === 'dark') return <Moon size={15} />;
-    return <Monitor size={15} />;
+    if (theme === 'light') return <Sun size={15} className="text-amber-500" />;
+    if (theme === 'dark') return <Moon size={15} className="text-indigo-400" />;
+    return <Monitor size={15} className="text-sky-400" />;
   };
 
   return (
@@ -95,6 +100,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         className={`relative flex items-center justify-between rounded-full border border-[var(--border-color)] bg-[var(--bg-card)]/95 backdrop-blur-2xl shadow-2xl transition-all duration-550 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isExpanded
             ? 'w-[94vw] max-w-4xl px-7 py-3.5 shadow-2xl'
+            : hasRepoDraft
+            ? 'w-auto min-w-[340px] px-4.5 py-2.5 cursor-pointer hover:border-[var(--border-hover)] hover:shadow-xl'
             : 'w-72 px-4.5 py-2.5 cursor-pointer hover:border-[var(--border-hover)] hover:shadow-xl'
         }`}
       >
@@ -114,6 +121,20 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Collapsed State: Persistent Action Icons */}
         {!isExpanded && (
           <div className="flex items-center gap-1.5 pl-3 border-l border-[var(--border-color)]">
+            {hasRepoDraft && onResumeDraft && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResumeDraft();
+                }}
+                title="Unsaved Repository Draft — Click to resume"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/40 bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 dark:text-amber-400 transition-all text-xs font-mono font-medium animate-pulse cursor-pointer shadow-xs"
+              >
+                <AlertTriangle size={13} className="shrink-0 text-amber-500 dark:text-amber-400" />
+                <span>Resume Draft</span>
+              </button>
+            )}
+
             <button
               onClick={handleCycleTheme}
               title={`Theme: ${theme.toUpperCase()} (Click to toggle)`}
@@ -198,6 +219,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           }`}
         >
           <ThemeToggle theme={theme} onThemeChange={onThemeChange} />
+
+          {hasRepoDraft && onResumeDraft && (
+            <button
+              onClick={onResumeDraft}
+              title="Unsaved Repository Draft — Click to continue adding repository"
+              className="monochrome-btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 dark:text-amber-300 text-xs font-mono font-medium transition-all shadow-xs cursor-pointer animate-pulse whitespace-nowrap"
+            >
+              <AlertTriangle size={13} className="shrink-0 text-amber-500 dark:text-amber-400" />
+              <span>Resume Draft</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenAddModal}

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   FolderPlus,
   CheckCircle2,
-  Activity,
+  Server,
 } from 'lucide-react';
 import { Project, ProjectCategory, UserSettings, ThemeMode, NavigationTab, RunningProcess, getProjectServices } from './types';
 import {
@@ -10,6 +10,7 @@ import {
   saveProjects,
   loadSettings,
   saveSettings,
+  loadRepoDraft,
   INITIAL_PROJECTS,
 } from './services/storage';
 import {
@@ -43,6 +44,7 @@ export function App() {
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [hasRepoDraft, setHasRepoDraft] = useState<boolean>(() => loadRepoDraft() !== null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [treeProject, setTreeProject] = useState<Project | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -131,7 +133,12 @@ export function App() {
         services: updatedSrvs,
         runningProcess: updatedRunningProcess,
       };
-      setSelectedProject(updatedProj);
+      setSelectedProject((current) => {
+        if (current && current.id === p.id) {
+          return updatedProj;
+        }
+        return current;
+      });
       const updatedList = projects.map((item) =>
         item.id === p.id ? updatedProj : item
       );
@@ -142,11 +149,14 @@ export function App() {
   const updateProjectsState = (updated: Project[]) => {
     setProjects(updated);
     saveProjects(updated);
-    // Keep selected project in sync if open
-    if (selectedProject) {
-      const match = updated.find((p) => p.id === selectedProject.id);
-      setSelectedProject(match || null);
-    }
+    // Keep selected project in sync ONLY if currently open
+    setSelectedProject((current) => {
+      if (current) {
+        const match = updated.find((p) => p.id === current.id);
+        return match || null;
+      }
+      return null;
+    });
   };
 
   const showToast = (msg: string) => {
@@ -177,7 +187,7 @@ export function App() {
   }, [activeNavTab, treeProject]);
 
   // Launch Handlers with path validation guard
-  const handleOpenIde = async (p: Project) => {
+  const handleOpenIde = async (p: Project, customIde?: string) => {
     if (p.path) {
       const val = await validateDirectoryPath(p.path);
       if (!val.isValid) {
@@ -185,7 +195,8 @@ export function App() {
         return;
       }
     }
-    const res = await openInIde(p.path, settings.preferredIde);
+    const targetIde = customIde || settings.preferredIde || 'vscode';
+    const res = await openInIde(p.path, targetIde);
     showToast(res.message);
 
     const updated = projects.map((item) =>
@@ -194,7 +205,7 @@ export function App() {
     updateProjectsState(updated);
   };
 
-  const handleOpenTerminal = async (p: Project) => {
+  const handleOpenTerminal = async (p: Project, customTerminal?: string) => {
     if (p.path) {
       const val = await validateDirectoryPath(p.path);
       if (!val.isValid) {
@@ -202,7 +213,8 @@ export function App() {
         return;
       }
     }
-    const res = await openInTerminal(p.path);
+    const targetTerminal = customTerminal || settings.defaultTerminal || 'powershell';
+    const res = await openInTerminal(p.path, targetTerminal);
     showToast(res.message);
   };
 
@@ -465,7 +477,6 @@ export function App() {
           : item
       );
       updateProjectsState(updated);
-      showToast('Git status refreshed from disk');
     }
   };
 
@@ -491,7 +502,7 @@ export function App() {
           : [
               {
                 id: `srv-${Date.now()}-1`,
-                name: 'Main Service',
+                name: 'Frontend',
                 folder: './',
                 command: projectData.devCommand || 'npm run dev',
               },
@@ -576,6 +587,11 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         theme={settings.theme}
         onThemeChange={handleThemeChange}
+        hasRepoDraft={hasRepoDraft}
+        onResumeDraft={() => {
+          setEditingProject(null);
+          setIsAddModalOpen(true);
+        }}
       />
 
       {/* Main Content Area (Spaced for Floating Oval Header) */}
@@ -632,7 +648,7 @@ export function App() {
                     }`}
                     title="View and manage all active services across repositories"
                   >
-                    <Activity
+                    <Server
                       size={13}
                       className={
                         totalActiveServicesCount > 0
@@ -739,6 +755,14 @@ export function App() {
           updateProjectsState(newProjects);
           showToast(`Switched to branch "${updated.gitStatus?.branch}"`);
         }}
+        onUpdateProject={(updated) => {
+          setSelectedProject(updated);
+          const newProjects = projects.map((item) =>
+            item.id === updated.id ? updated : item
+          );
+          updateProjectsState(newProjects);
+          showToast('Repository link updated');
+        }}
       />
 
       {/* Add / Edit Repository Modal */}
@@ -750,6 +774,10 @@ export function App() {
         }}
         onSave={handleSaveProject}
         initialProject={editingProject}
+        onDraftChange={(draftExists) => setHasRepoDraft(draftExists)}
+        onDraftSavedNotify={() => {
+          showToast('Repository draft auto-saved. Click "Resume Draft" in the header anytime.');
+        }}
       />
 
       {/* Preferences / Settings Modal */}

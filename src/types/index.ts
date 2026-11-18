@@ -12,6 +12,7 @@ export interface GitStatus {
   lastCommitTime: string;
   lastCommitMessage: string;
   isClean: boolean;
+  remoteUrl?: string;
 }
 
 export interface RunningProcess {
@@ -46,7 +47,7 @@ export const getProjectServices = (project: Project): ProjectService[] => {
   return [
     {
       id: 'srv-1',
-      name: 'Main Service',
+      name: 'Frontend',
       folder: './',
       command: project.devCommand || 'npm run dev',
       runningProcess: project.runningProcess,
@@ -67,6 +68,7 @@ export interface Project {
   devCommand?: string;
   runningProcess?: RunningProcess;
   gitStatus?: GitStatus;
+  githubUrl?: string;
   lastOpenedAt?: string;
   createdAt: string;
 }
@@ -80,4 +82,24 @@ export interface UserSettings {
   preferredIde: 'vscode' | 'cursor' | 'zed' | 'sublime' | 'custom';
   defaultTerminal: 'powershell' | 'terminal' | 'cmd';
   defaultProjectsDir?: string;
+}
+
+export interface AddRepoDraftServiceItem {
+  id: string;
+  name: string;
+  folder: string;
+  command: string;
+  isCustomFolder?: boolean;
+}
+
+export interface AddRepoDraft {
+  name: string;
+  path: string;
+  githubUrl: string;
+  category: Exclude<ProjectCategory, 'all'>;
+  priority: Priority;
+  deadline: string;
+  notes: string;
+  services: AddRepoDraftServiceItem[];
+  savedAt: string;
 }

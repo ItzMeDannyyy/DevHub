@@ -20,14 +20,30 @@ pub struct GitRepoInfo {
     pub uncommitted_count: usize,
     pub last_commit_message: String,
     pub is_clean: bool,
+    pub remote_url: Option<String>,
 }
 
 #[tauri::command]
 fn open_in_ide(path: String, ide: String) -> Result<String, String> {
-    let ide_cmd = match ide.to_lowercase().as_str() {
+    let ide_clean = ide.trim().to_lowercase();
+    let ide_cmd = match ide_clean.as_str() {
         "cursor" => "cursor",
         "zed" => "zed",
         "sublime" | "subl" => "subl",
+        "code-insiders" => "code-insiders",
+        "webstorm" => "webstorm",
+        "intellij" | "idea" => "idea",
+        "pycharm" => "pycharm",
+        "rustrover" => "rustrover",
+        "goland" => "goland",
+        "phpstorm" => "phpstorm",
+        "clion" => "clion",
+        "rider" => "rider",
+        "fleet" => "fleet",
+        "androidstudio" | "studio" => "studio",
+        "notepad++" | "notepadplusplus" => "notepad++",
+        "vscode" | "code" => "code",
+        other if !other.is_empty() => other,
         _ => "code",
     };
 
@@ -48,39 +64,125 @@ fn open_in_ide(path: String, ide: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to spawn IDE ({}): {}", ide_cmd, e))?;
     }
 
-    Ok(format!("Opened {} at {}", ide_cmd, path))
+    Ok(format!("Opened in {} at {}", ide_cmd, path))
 }
 
 #[tauri::command]
-fn open_in_terminal(path: String) -> Result<String, String> {
+fn open_in_terminal(path: String, terminal: Option<String>) -> Result<String, String> {
+    let term = terminal.unwrap_or_else(|| "default".into()).trim().to_lowercase();
+
     #[cfg(target_os = "windows")]
     {
-        // Try opening Windows Terminal, fallback to PowerShell
-        let wt_result = Command::new("cmd")
-            .args(["/C", "start", "wt", "-d", &path])
-            .spawn();
+        match term.as_str() {
+            "cmd" | "command prompt" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "cmd.exe", "/K", &format!("cd /d \"{}\"", path)])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open Command Prompt: {}", e))?;
+            }
+            "git-bash" | "bash" | "git bash" => {
+                let pf_git_bash = r"C:\Program Files\Git\git-bash.exe";
+                let pf_git_bash_x86 = r"C:\Program Files (x86)\Git\git-bash.exe";
 
-        if wt_result.is_err() {
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    "start",
-                    "powershell",
-                    "-NoExit",
-                    "-Command",
-                    &format!("Set-Location -LiteralPath '{}'", path),
-                ])
-                .spawn()
-                .map_err(|e| format!("Failed to open terminal: {}", e))?;
+                let launched = if std::path::Path::new(pf_git_bash).exists() {
+                    Command::new(pf_git_bash)
+                        .arg(format!("--cd={}", path))
+                        .spawn()
+                } else if std::path::Path::new(pf_git_bash_x86).exists() {
+                    Command::new(pf_git_bash_x86)
+                        .arg(format!("--cd={}", path))
+                        .spawn()
+                } else {
+                    Command::new("cmd")
+                        .args(["/C", "start", "", "git-bash.exe", &format!("--cd={}", path)])
+                        .spawn()
+                        .or_else(|_| {
+                            Command::new("cmd")
+                                .args(["/C", "start", "bash.exe", "-c", &format!("cd \"{}\" && exec bash", path)])
+                                .spawn()
+                        })
+                };
+
+                launched.map_err(|e| format!("Failed to open Git Bash: {}", e))?;
+            }
+            "wsl" | "ubuntu" | "debian" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "wsl.exe", "--cd", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open WSL: {}", e))?;
+            }
+            "pwsh" | "powershell 7" => {
+                Command::new("cmd")
+                    .args([
+                        "/C",
+                        "start",
+                        "pwsh.exe",
+                        "-NoExit",
+                        "-Command",
+                        &format!("Set-Location -LiteralPath '{}'", path),
+                    ])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open PowerShell 7: {}", e))?;
+            }
+            "wt" | "windows terminal" => {
+                Command::new("cmd")
+                    .args(["/C", "start", "wt.exe", "-d", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open Windows Terminal: {}", e))?;
+            }
+            "powershell" | "windows powershell" => {
+                Command::new("cmd")
+                    .args([
+                        "/C",
+                        "start",
+                        "powershell.exe",
+                        "-NoExit",
+                        "-Command",
+                        &format!("Set-Location -LiteralPath '{}'", path),
+                    ])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open PowerShell: {}", e))?;
+            }
+            _ => {
+                // Default: Try Windows Terminal first, fallback to PowerShell
+                let wt_result = Command::new("cmd")
+                    .args(["/C", "start", "wt.exe", "-d", &path])
+                    .spawn();
+
+                if wt_result.is_err() {
+                    Command::new("cmd")
+                        .args([
+                            "/C",
+                            "start",
+                            "powershell.exe",
+                            "-NoExit",
+                            "-Command",
+                            &format!("Set-Location -LiteralPath '{}'", path),
+                        ])
+                        .spawn()
+                        .map_err(|e| format!("Failed to open terminal: {}", e))?;
+                }
+            }
         }
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .args(["-a", "Terminal", &path])
-            .spawn()
-            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+        match term.as_str() {
+            "iterm" | "iterm2" => {
+                Command::new("open")
+                    .args(["-a", "iTerm", &path])
+                    .spawn()
+                    .or_else(|_| Command::new("open").args(["-a", "Terminal", &path]).spawn())
+                    .map_err(|e| format!("Failed to open terminal: {}", e))?;
+            }
+            _ => {
+                Command::new("open")
+                    .args(["-a", "Terminal", &path])
+                    .spawn()
+                    .map_err(|e| format!("Failed to open terminal: {}", e))?;
+            }
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -96,7 +198,7 @@ fn open_in_terminal(path: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to open terminal: {}", e))?;
     }
 
-    Ok(format!("Terminal opened at {}", path))
+    Ok(format!("Opened {} at {}", term, path))
 }
 
 #[tauri::command]
@@ -142,6 +244,7 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
             uncommitted_count: 0,
             last_commit_message: "No git tracking initialized".into(),
             is_clean: true,
+            remote_url: None,
         });
     }
 
@@ -174,8 +277,50 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
         .trim()
         .to_string();
 
+    // 4. Get remote origin URL
+    let remote_url = {
+        let output = hidden_command("git")
+            .args(["-C", &path, "remote", "get-url", "origin"])
+            .output();
+
+        if let Ok(out) = output {
+            if out.status.success() {
+                let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !url.is_empty() {
+                    Some(url)
+                } else {
+                    None
+                }
+            } else {
+                let config_out = hidden_command("git")
+                    .args(["-C", &path, "config", "--get", "remote.origin.url"])
+                    .output();
+                if let Ok(co) = config_out {
+                    if co.status.success() {
+                        let url = String::from_utf8_lossy(&co.stdout).trim().to_string();
+                        if !url.is_empty() {
+                            Some(url)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
+
     Ok(GitRepoInfo {
-        branch: if branch.is_empty() { "main".into() } else { branch },
+        branch: if branch.is_empty() {
+            "main".into()
+        } else {
+            branch
+        },
         uncommitted_count,
         last_commit_message: if last_commit_message.is_empty() {
             "No commits yet".into()
@@ -183,7 +328,82 @@ fn inspect_git_repo(path: String) -> Result<GitRepoInfo, String> {
             last_commit_message
         },
         is_clean: uncommitted_count == 0,
+        remote_url,
     })
+}
+
+#[tauri::command]
+fn get_git_remote_url(path: String) -> Result<Option<String>, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.join(".git").exists() {
+        return Ok(None);
+    }
+
+    let output = hidden_command("git")
+        .args(["-C", &path, "remote", "get-url", "origin"])
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !url.is_empty() {
+                return Ok(Some(url));
+            }
+        }
+    }
+
+    let config_output = hidden_command("git")
+        .args(["-C", &path, "config", "--get", "remote.origin.url"])
+        .output();
+
+    if let Ok(out) = config_output {
+        if out.status.success() {
+            let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !url.is_empty() {
+                return Ok(Some(url));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+#[tauri::command]
+fn set_git_remote_url(path: String, url: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() || !p.join(".git").exists() {
+        return Err("Directory is not a local git repository".into());
+    }
+
+    let clean_url = url.trim().to_string();
+    if clean_url.is_empty() {
+        let _ = hidden_command("git")
+            .args(["-C", &path, "remote", "remove", "origin"])
+            .output();
+        return Ok("".into());
+    }
+
+    let check = hidden_command("git")
+        .args(["-C", &path, "remote", "get-url", "origin"])
+        .output();
+
+    let has_origin = check.map(|o| o.status.success()).unwrap_or(false);
+
+    let res = if has_origin {
+        hidden_command("git")
+            .args(["-C", &path, "remote", "set-url", "origin", &clean_url])
+            .output()
+    } else {
+        hidden_command("git")
+            .args(["-C", &path, "remote", "add", "origin", &clean_url])
+            .output()
+    };
+
+    match res {
+        Ok(out) if out.status.success() => Ok(clean_url),
+        Ok(out) => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),
+        Err(e) => Err(format!("Failed to configure git remote: {}", e)),
+    }
 }
 
 #[tauri::command]
@@ -297,7 +517,11 @@ fn check_process_running(pid: u32) -> bool {
         const STILL_ACTIVE: DWORD = 259;
 
         unsafe extern "system" {
-            fn OpenProcess(dwDesiredAccess: DWORD, bInheritHandle: BOOL, dwProcessId: DWORD) -> HANDLE;
+            fn OpenProcess(
+                dwDesiredAccess: DWORD,
+                bInheritHandle: BOOL,
+                dwProcessId: DWORD,
+            ) -> HANDLE;
             fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut DWORD) -> BOOL;
             fn CloseHandle(hObject: HANDLE) -> BOOL;
         }
@@ -316,9 +540,7 @@ fn check_process_running(pid: u32) -> bool {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let output = Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .output();
+        let output = Command::new("kill").args(["-0", &pid.to_string()]).output();
         output.map(|o| o.status.success()).unwrap_or(false)
     }
 }
@@ -387,7 +609,9 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: false,
             is_dir: false,
             canonical_path: None,
-            error_message: Some("Directory path cannot be empty. Please provide a path.".to_string()),
+            error_message: Some(
+                "Directory path cannot be empty. Please provide a path.".to_string(),
+            ),
             subdirectories_count: 0,
         });
     }
@@ -400,7 +624,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: false,
             is_dir: false,
             canonical_path: None,
-            error_message: Some(format!("Directory path does not exist on disk: \"{}\"", clean)),
+            error_message: Some(format!(
+                "Directory path does not exist on disk: \"{}\"",
+                clean
+            )),
             subdirectories_count: 0,
         });
     }
@@ -411,7 +638,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
             exists: true,
             is_dir: false,
             canonical_path: None,
-            error_message: Some(format!("The path points to a file, not a directory folder: \"{}\"", clean)),
+            error_message: Some(format!(
+                "The path points to a file, not a directory folder: \"{}\"",
+                clean
+            )),
             subdirectories_count: 0,
         });
     }
@@ -434,7 +664,10 @@ fn validate_directory_path(path: String) -> Result<PathValidationResult, String>
                 exists: true,
                 is_dir: true,
                 canonical_path: None,
-                error_message: Some(format!("Directory exists but cannot be accessed (permission error): {}", e)),
+                error_message: Some(format!(
+                    "Directory exists but cannot be accessed (permission error): {}",
+                    e
+                )),
                 subdirectories_count: 0,
             });
         }
@@ -495,15 +728,22 @@ fn list_subdirectories(path: String) -> Result<Vec<String>, String> {
                         folders.push(format!("./{}", file_name));
 
                         // If it's a common monorepo grouping directory, inspect 1 level deeper
-                        if matches!(file_name.as_str(), "packages" | "apps" | "services" | "crates" | "modules") {
+                        if matches!(
+                            file_name.as_str(),
+                            "packages" | "apps" | "services" | "crates" | "modules"
+                        ) {
                             let sub_dir = entry.path();
                             if let Ok(sub_entries) = std::fs::read_dir(sub_dir) {
                                 for sub_entry in sub_entries.flatten() {
                                     if let Ok(sub_ft) = sub_entry.file_type() {
                                         if sub_ft.is_dir() {
-                                            let sub_name = sub_entry.file_name().to_string_lossy().to_string();
-                                            if !sub_name.starts_with('.') && !ignored_names.contains(&sub_name.as_str()) {
-                                                folders.push(format!("./{}/{}", file_name, sub_name));
+                                            let sub_name =
+                                                sub_entry.file_name().to_string_lossy().to_string();
+                                            if !sub_name.starts_with('.')
+                                                && !ignored_names.contains(&sub_name.as_str())
+                                            {
+                                                folders
+                                                    .push(format!("./{}/{}", file_name, sub_name));
                                             }
                                         }
                                     }
@@ -548,9 +788,20 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
     let mut children = None;
     if is_dir && current_depth < max_depth {
         let ignored_dirs = [
-            ".git", "node_modules", "target", "dist", "build",
-            ".next", ".nuxt", ".svelte-kit", "venv", ".venv",
-            "__pycache__", ".gemini", ".turbo", ".artifacts"
+            ".git",
+            "node_modules",
+            "target",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            ".svelte-kit",
+            "venv",
+            ".venv",
+            "__pycache__",
+            ".gemini",
+            ".turbo",
+            ".artifacts",
         ];
 
         if !ignored_dirs.contains(&name.as_str()) {
@@ -558,7 +809,8 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
                 let mut child_nodes = Vec::new();
                 for entry in entries.flatten() {
                     let child_path = entry.path();
-                    let child_name = child_path.file_name()
+                    let child_name = child_path
+                        .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
 
@@ -572,12 +824,10 @@ fn scan_tree(path: &std::path::Path, current_depth: usize, max_depth: usize) -> 
                 }
 
                 // Sort directories first, then alphabetical
-                child_nodes.sort_by(|a, b| {
-                    match (a.is_dir, b.is_dir) {
-                        (true, false) => std::cmp::Ordering::Less,
-                        (false, true) => std::cmp::Ordering::Greater,
-                        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                    }
+                child_nodes.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
                 });
 
                 children = Some(child_nodes);
@@ -606,8 +856,8 @@ fn get_directory_tree(path: String, max_depth: Option<usize>) -> Result<TreeNode
     }
 
     let depth_limit = max_depth.unwrap_or(5);
-    let root_node = scan_tree(p, 0, depth_limit)
-        .ok_or_else(|| "Failed to scan root directory".to_string())?;
+    let root_node =
+        scan_tree(p, 0, depth_limit).ok_or_else(|| "Failed to scan root directory".to_string())?;
 
     Ok(root_node)
 }
@@ -625,8 +875,16 @@ fn to_base64(data: &[u8]) -> String {
     let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        let b1 = if chunk.len() > 1 {
+            chunk[1] as usize
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            chunk[2] as usize
+        } else {
+            0
+        };
 
         result.push(CHARSET[(b0 >> 2) & 0x3F] as char);
         result.push(CHARSET[((b0 << 4) | (b1 >> 4)) & 0x3F] as char);
@@ -660,17 +918,26 @@ fn read_file_content(path: String) -> Result<FileContentResult, String> {
     // Limit preview to files under 8 MB
     if size > 8 * 1024 * 1024 {
         return Ok(FileContentResult {
-            content: format!("File is too large to preview ({:.2} MB). Please open in external editor.", size as f64 / (1024.0 * 1024.0)),
+            content: format!(
+                "File is too large to preview ({:.2} MB). Please open in external editor.",
+                size as f64 / (1024.0 * 1024.0)
+            ),
             is_binary: false,
             size,
             line_count: 0,
         });
     }
 
-    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = p
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
 
     // Check for image formats
-    if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico") {
+    if matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "ico"
+    ) {
         if let Ok(bytes) = std::fs::read(p) {
             let mime = match ext.as_str() {
                 "png" => "image/png",
@@ -715,6 +982,7 @@ fn read_file_content(path: String) -> Result<FileContentResult, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             open_in_ide,
@@ -723,6 +991,8 @@ pub fn run() {
             inspect_git_repo,
             list_git_branches,
             switch_git_branch,
+            get_git_remote_url,
+            set_git_remote_url,
             start_dev_process,
             kill_process_by_pid,
             check_process_running,
