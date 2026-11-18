@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::process::Command;
+use tauri_plugin_aptabase::EventTracker;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -984,6 +985,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_aptabase::Builder::new("A-US-0911298627")
+                .with_crash_reporting()
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             open_in_ide,
             open_in_terminal,
@@ -1001,6 +1007,16 @@ pub fn run() {
             get_directory_tree,
             read_file_content
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|handler, event| match event {
+            tauri::RunEvent::Exit { .. } => {
+                let _ = handler.track_event("app_exited", None);
+                handler.flush_events_blocking();
+            }
+            tauri::RunEvent::Ready { .. } => {
+                let _ = handler.track_event("app_started", None);
+            }
+            _ => {}
+        });
 }

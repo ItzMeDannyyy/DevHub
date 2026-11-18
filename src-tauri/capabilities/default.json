@@ -8,6 +8,8 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "aptabase:allow-track-event",
+    "aptabase:allow-track-error"
   ]
 }

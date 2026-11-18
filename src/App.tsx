@@ -24,6 +24,7 @@ import {
   inspectGitRepo,
   checkProcessRunning,
 } from './services/tauriBridge';
+import { trackEvent } from './services/analytics';
 import { Navbar } from './components/Navbar';
 import { MainNavigationBar } from './components/MainNavigationBar';
 import { DeveloperTools } from './components/DeveloperTools';
@@ -98,6 +99,14 @@ export function App() {
     mediaQuery.addEventListener('change', listener);
     return () => mediaQuery.removeEventListener('change', listener);
   }, [settings.theme]);
+
+  // Analytics: Record app initialization session
+  useEffect(() => {
+    trackEvent('app_initialized', {
+      project_count: projects.length,
+      theme: settings.theme,
+    });
+  }, []);
 
   // Select project & lazily verify process health on-demand
   const handleSelectProject = async (p: Project) => {
@@ -543,6 +552,7 @@ export function App() {
   const handleUpdateSettings = (newSettings: UserSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
+    trackEvent('save_settings', { theme: newSettings.theme });
   };
 
   const handleResetData = async () => {
@@ -603,6 +613,7 @@ export function App() {
             onSelectTab={(tab) => {
               setTreeProject(null);
               setActiveNavTab(tab);
+              trackEvent('screen_view', { tab });
             }}
             projectCount={projects.length}
           />
