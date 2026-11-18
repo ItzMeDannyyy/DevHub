@@ -2,7 +2,7 @@
 
 > **A minimalist, high-contrast monochrome desktop command center and process controller for software engineers.**
 
-Created and developed by **Danny**.
+Created and developed by **ItzMeDannyyy**.
 
 ---
 
